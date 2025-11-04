@@ -31,8 +31,8 @@ if ! python -c "import fastapi" 2>/dev/null; then
     pip install -r api/requirements.txt
 fi
 
-echo "✅ Starting FastAPI server on http://localhost:8000"
-echo "📖 API Documentation: http://localhost:8000/docs"
+echo "✅ Starting FastAPI server on http://localhost:8001"
+echo "📖 API Documentation: http://localhost:8001/docs"
 echo ""
 echo "Press Ctrl+C to stop the server"
 echo ""

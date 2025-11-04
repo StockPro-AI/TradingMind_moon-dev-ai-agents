@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 import sys
 import os
+import re
 from dotenv import load_dotenv
 import redis
 import hashlib
@@ -21,6 +22,14 @@ import hashlib
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
+
+# Debug logging flag
+DEBUG_LOGGING = os.getenv('DEBUG_LOGGING', 'false').lower() == 'true'
+
+def debug_log(message: str):
+    """Print debug message only if DEBUG_LOGGING is enabled"""
+    if DEBUG_LOGGING:
+        print(message)
 
 # Verify critical environment variables
 if not os.getenv('ANTHROPIC_API_KEY') and not os.getenv('OPENAI_API_KEY'):
@@ -73,12 +82,10 @@ except (redis.ConnectionError, redis.TimeoutError) as e:
 CACHE_TTL = 86400
 
 
-def generate_cache_key(ticker: str, date: str, config: Dict[str, Any]) -> str:
+def generate_cache_key(ticker: str, date: str) -> str:
     """Generate a unique cache key based on ticker, date, and config"""
     # Create a hash of the config to include in the key
-    config_str = json.dumps(config, sort_keys=True)
-    config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
-    return f"analysis:{ticker}:{date}:{config_hash}"
+    return f"analysis:{ticker}:{date}"
 
 
 def get_cached_result(cache_key: str) -> Optional[Dict[str, Any]]:
@@ -89,7 +96,7 @@ def get_cached_result(cache_key: str) -> Optional[Dict[str, Any]]:
     try:
         cached_data = redis_client.get(cache_key)
         if cached_data:
-            print(f"✅ Cache hit for key: {cache_key}")
+            debug_log(f"✅ Cache hit for key: {cache_key}")
             return json.loads(cached_data)
     except Exception as e:
         print(f"⚠️  Redis get error: {e}")
@@ -108,7 +115,7 @@ def set_cached_result(cache_key: str, result: Dict[str, Any], ttl: int = CACHE_T
             ttl,
             json.dumps(result)
         )
-        print(f"✅ Cached result with key: {cache_key} (TTL: {ttl}s)")
+        debug_log(f"✅ Cached result with key: {cache_key} (TTL: {ttl}s)")
     except Exception as e:
         print(f"⚠️  Redis set error: {e}")
 
@@ -216,15 +223,57 @@ async def update_config(request: ConfigRequest):
     return {"config": config}
 
 
-@app.post("/api/analyze", response_model=AnalysisResponse)
+@app.post("/api/analyze")
 async def analyze_stock(request: AnalysisRequest):
     """
-    Analyze a stock and return trading decision
-    This is a synchronous endpoint - for real-time updates, use WebSocket
+    Analyze a stock and return complete categorized analysis
+
+    This endpoint:
+    1. Runs complete analysis (all phases)
+    2. Extracts and categorizes content by markdown headers
+    3. Caches results in Redis for 24 hours
+    4. Returns categorized content ready for display
+
+    Returns:
+        {
+            "ticker": str,
+            "date": str,
+            "decision": str,
+            "categorizedContent": {
+                "Category Name": [
+                    {"agent": "Agent Name", "content": "..."},
+                    ...
+                ],
+                ...
+            },
+            "status": "success",
+            "message": str,
+            "cached_at": str (optional)
+        }
     """
     try:
         # Use custom config or default
         config = request.config if request.config else DEFAULT_CONFIG.copy()
+
+        # Generate cache key
+        cache_key = generate_cache_key(request.ticker, request.date)
+
+        # Check cache first
+        cached_result = get_cached_result(cache_key)
+        if cached_result:
+            debug_log(f"✅ Returning cached result for {request.ticker} on {request.date}")
+            return {
+                "ticker": request.ticker,
+                "date": request.date,
+                "decision": cached_result.get("decision", "HOLD"),
+                "categorizedContent": cached_result.get("categorizedContent", {}),
+                "status": "success",
+                "message": f"Analysis loaded from cache (cached at {cached_result.get('cached_at', 'unknown')})",
+                "cached_at": cached_result.get("cached_at")
+            }
+
+        # No cache found, run complete analysis
+        debug_log(f"🔄 Running fresh analysis for {request.ticker} on {request.date}")
 
         # Initialize trading graph
         ta = TradingAgentsGraph(debug=False, config=config)
@@ -232,14 +281,157 @@ async def analyze_stock(request: AnalysisRequest):
         # Run analysis
         final_state, decision = ta.propagate(request.ticker, request.date)
 
-        return {
+        # Get log_states_dict which contains all the structured data
+        log_data = ta.log_states_dict.get(request.date, {})
+
+        # DEBUG: Check if log_states_dict has data
+        debug_log(f"DEBUG: log_states_dict keys: {list(ta.log_states_dict.keys())}")
+        debug_log(f"DEBUG: request.date: {request.date}")
+        debug_log(f"DEBUG: log_data keys: {list(log_data.keys()) if log_data else 'EMPTY'}")
+        debug_log(f"DEBUG: log_data is empty: {not log_data}")
+
+        # Parse and categorize content from log_states_dict
+        categorized_content = {}
+
+        def extract_text(value):
+            """Extract string from various formats"""
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value
+            if hasattr(value, 'content'):
+                content = value.content
+                if isinstance(content, list):
+                    return '\n'.join([item.get('text', '') if isinstance(item, dict) else str(item) for item in content])
+                return str(content)
+            return str(value)
+
+        def categorize_by_headers(agent_name: str, content: str):
+            """Parse content and organize by markdown headers"""
+            if not content:
+                return
+
+            lines = content.split('\n')
+            current_category = None
+            current_content = []
+
+            for line in lines:
+                # Check if line is a markdown header
+                header_match = line.strip().match(r'^(#{1,3})\s+(.+)$') if hasattr(line.strip(), 'match') else None
+                if not header_match:
+                    import re
+                    header_match = re.match(r'^(#{1,3})\s+(.+)$', line.strip())
+
+                if header_match:
+                    # Save previous category
+                    if current_category and current_content:
+                        content_str = '\n'.join(current_content).strip()
+                        if content_str:
+                            if current_category not in categorized_content:
+                                categorized_content[current_category] = []
+                            categorized_content[current_category].append({
+                                "agent": agent_name,
+                                "content": content_str
+                            })
+
+                    # Start new category
+                    current_category = header_match.group(2).strip()
+                    current_content = []
+                elif current_category:
+                    current_content.append(line)
+
+            # Save last category
+            if current_category and current_content:
+                content_str = '\n'.join(current_content).strip()
+                if content_str:
+                    if current_category not in categorized_content:
+                        categorized_content[current_category] = []
+                    categorized_content[current_category].append({
+                        "agent": agent_name,
+                        "content": content_str
+                    })
+
+        # Process each agent's output
+        if log_data.get("market_report"):
+            market_text = extract_text(log_data["market_report"])
+            debug_log(f"DEBUG: Market report extracted, length: {len(market_text)}")
+            categorize_by_headers("Market Analyst", market_text)
+
+        if log_data.get("sentiment_report"):
+            sentiment_text = extract_text(log_data["sentiment_report"])
+            debug_log(f"DEBUG: Sentiment report extracted, length: {len(sentiment_text)}")
+            categorize_by_headers("Social Analyst", sentiment_text)
+
+        if log_data.get("news_report"):
+            news_text = extract_text(log_data["news_report"])
+            debug_log(f"DEBUG: News report extracted, length: {len(news_text)}")
+            categorize_by_headers("News Analyst", news_text)
+
+        if log_data.get("fundamentals_report"):
+            fundamentals_text = extract_text(log_data["fundamentals_report"])
+            debug_log(f"DEBUG: Fundamentals report extracted, length: {len(fundamentals_text)}")
+            categorize_by_headers("Fundamentals Analyst", fundamentals_text)
+
+        # Investment debate
+        debate_state = log_data.get("investment_debate_state", {})
+        if debate_state.get("judge_decision"):
+            judge_text = extract_text(debate_state["judge_decision"])
+            debug_log(f"DEBUG: Investment judge decision extracted, length: {len(judge_text)}")
+            categorize_by_headers("Research Manager", judge_text)
+
+        # Trader
+        if log_data.get("trader_investment_decision"):
+            trader_text = extract_text(log_data["trader_investment_decision"])
+            debug_log(f"DEBUG: Trader decision extracted, length: {len(trader_text)}")
+            categorize_by_headers("Trader", trader_text)
+
+        # Risk debate
+        risk_state = log_data.get("risk_debate_state", {})
+        if risk_state.get("judge_decision"):
+            risk_judge_text = extract_text(risk_state["judge_decision"])
+            debug_log(f"DEBUG: Risk judge decision extracted, length: {len(risk_judge_text)}")
+            categorize_by_headers("Risk Manager", risk_judge_text)
+
+        # Final decision
+        if log_data.get("final_trade_decision"):
+            final_text = extract_text(log_data["final_trade_decision"])
+            debug_log(f"DEBUG: Final decision extracted, length: {len(final_text)}")
+            categorize_by_headers("Portfolio Manager", final_text)
+
+        # DEBUG: Check categorization results
+        debug_log(f"DEBUG: categorized_content keys: {list(categorized_content.keys())}")
+        debug_log(f"DEBUG: categorized_content is empty: {not categorized_content}")
+        debug_log(f"DEBUG: Number of categories: {len(categorized_content)}")
+        for category, items in categorized_content.items():
+            debug_log(f"DEBUG: Category '{category}' has {len(items)} items")
+
+        # Cache the result
+        cached_at = datetime.now().isoformat()
+        cache_data = {
             "ticker": request.ticker,
             "date": request.date,
             "decision": decision,
-            "status": "success",
-            "message": f"Analysis completed for {request.ticker}"
+            "categorizedContent": categorized_content,
+            "cached_at": cached_at
         }
+        set_cached_result(cache_key, cache_data)
+
+        # DEBUG: Check final response
+        response_data = {
+            "ticker": request.ticker,
+            "date": request.date,
+            "decision": decision,
+            "categorizedContent": categorized_content,
+            "status": "success",
+            "message": f"Analysis completed for {request.ticker}",
+            "cached_at": cached_at
+        }
+        debug_log(f"DEBUG: Final response - decision: {decision}, categorizedContent has {len(categorized_content)} categories")
+
+        return response_data
     except Exception as e:
+        import traceback
+        print(f"Error in analyze_stock: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -266,7 +458,7 @@ async def websocket_analyze(websocket: WebSocket):
             }, websocket)
         else:
             # Generate cache key
-            cache_key = generate_cache_key(ticker, analysis_date, config)
+            cache_key = generate_cache_key(ticker, analysis_date)
 
             # Check cache first
             cached_result = get_cached_result(cache_key)
@@ -294,7 +486,7 @@ async def websocket_analyze(websocket: WebSocket):
                     "final_state": cached_result["final_state"]
                 }, websocket)
 
-                print(f"✅ Served cached result for {ticker} on {analysis_date}")
+                debug_log(f"✅ Served cached result for {ticker} on {analysis_date}")
                 return
 
             # No cache found, proceed with analysis
@@ -341,6 +533,8 @@ async def websocket_analyze(websocket: WebSocket):
                     else:
                         result = str(value)
 
+                    debug_log(f"Result extracted, length: {len(result)}")
+
                     # Fix: If content has markdown headers but no newlines, add them
                     if result and '\n' not in result and '###' in result:
                         # Add newlines before markdown headers
@@ -367,7 +561,7 @@ async def websocket_analyze(websocket: WebSocket):
                     # Analyst Team Reports
                     if "market_report" in chunk and chunk["market_report"]:
                         extracted_content = extract_content_str(chunk["market_report"])
-                        print(f"📊 Market Analyst - Content length: {len(extracted_content)}, Lines: {extracted_content.count(chr(10))}")
+                        debug_log(f"📊 Market Analyst - Content length: {len(extracted_content)}")
                         message_queue.append({
                             "type": "update",
                             "agent": "Market Analyst",
@@ -377,9 +571,7 @@ async def websocket_analyze(websocket: WebSocket):
 
                     if "sentiment_report" in chunk and chunk["sentiment_report"]:
                         extracted_content = extract_content_str(chunk["sentiment_report"])
-                        print(f"📱 Social Analyst - Content length: {len(extracted_content)}, Lines: {extracted_content.count(chr(10))}")
-                        # Debug: show first 200 chars
-                        print(f"   First 200 chars: {repr(extracted_content[:200])}")
+                        debug_log(f"📱 Social Analyst - Content length: {len(extracted_content)}")
                         message_queue.append({
                             "type": "update",
                             "agent": "Social Analyst",
@@ -504,7 +696,7 @@ async def websocket_analyze(websocket: WebSocket):
                     return
 
                 # Run the analysis in a background thread while sending queued messages
-                print(f"🔄 Starting analysis for {ticker} on {analysis_date}")
+                debug_log(f"Starting analysis for {ticker} on {analysis_date}")
 
                 # Store result from thread
                 result_holder = {"final_state": None, "decision": None, "error": None}
@@ -547,7 +739,7 @@ async def websocket_analyze(websocket: WebSocket):
 
                 final_state = result_holder["final_state"]
                 decision = result_holder["decision"]
-                print(f"✅ Analysis complete for {ticker}: {decision}")
+                debug_log(f"✅ Analysis complete for {ticker}: {decision}")
 
                 # Helper function to extract content from messages
                 def extract_content(value):
@@ -561,6 +753,7 @@ async def websocket_analyze(websocket: WebSocket):
 
                 # Send individual team reports as updates so they appear in team panels
                 market_report = extract_content(final_state.get("market_report"))
+                debug_log(f"Market Report length: {len(market_report)}")
                 if market_report:
                     await manager.send_message({
                         "type": "update",
@@ -652,6 +845,7 @@ async def websocket_analyze(websocket: WebSocket):
                     "messages": message_queue,  # Store all messages for replay
                     "cached_at": datetime.now().isoformat()
                 }
+                debug_log(f"Caching result for {ticker} on {analysis_date}")
                 set_cached_result(cache_key, cache_data)
 
             except Exception as e:
@@ -745,12 +939,12 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
 
     print("✅ Starting TradingAgents API server...")
-    print("📡 Server: http://localhost:8000")
-    print("📖 API Docs: http://localhost:8000/docs")
+    print("📡 Server: http://localhost:8001")
+    print("📖 API Docs: http://localhost:8001/docs")
     print("⚠️  Press Ctrl+C to stop\n")
 
     try:
-        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+        uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
     except KeyboardInterrupt:
         print('\n\n🛑 Server stopped by user')
         sys.exit(0)
