@@ -1,21 +1,52 @@
 import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
+import os
 
 
 class FinancialSituationMemory:
     def __init__(self, name, config):
-        if config["backend_url"] == "http://localhost:11434/v1":
+        self.enabled = config.get("use_memory", True)
+        self.llm_provider = config.get("llm_provider", "openai").lower()
+
+        # If memory is disabled, skip initialization
+        if not self.enabled:
+            self.client = None
+            self.chroma_client = None
+            self.situation_collection = None
+            self.embedding = None
+            return
+
+        # Set up embedding model based on provider
+        if config.get("backend_url") == "http://localhost:11434/v1":
             self.embedding = "nomic-embed-text"
-        else:
+            self.client = OpenAI(base_url=config["backend_url"])
+        elif self.llm_provider == "anthropic":
+            # For Anthropic, we still use OpenAI for embeddings since Anthropic doesn't provide embeddings
+            # This requires OPENAI_API_KEY to be set
             self.embedding = "text-embedding-3-small"
-        self.client = OpenAI(base_url=config["backend_url"])
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if not openai_key:
+                raise ValueError(
+                    "When using Anthropic as LLM provider, you still need to set OPENAI_API_KEY "
+                    "for embeddings in the memory system. Set it in your .env file or environment. "
+                    "Alternatively, set USE_MEMORY=false in .env to disable memory features."
+                )
+            self.client = OpenAI(api_key=openai_key)
+        else:
+            # Default to OpenAI for both LLM and embeddings
+            self.embedding = "text-embedding-3-small"
+            self.client = OpenAI(base_url=config.get("backend_url", "https://api.openai.com/v1"))
+
         self.chroma_client = chromadb.Client(Settings(allow_reset=True))
-        self.situation_collection = self.chroma_client.create_collection(name=name)
+        # Use get_or_create_collection to avoid errors when collection already exists
+        self.situation_collection = self.chroma_client.get_or_create_collection(name=name)
 
     def get_embedding(self, text):
         """Get OpenAI embedding for a text"""
-        
+        if not self.enabled:
+            return None
+
         response = self.client.embeddings.create(
             model=self.embedding, input=text
         )
@@ -23,6 +54,8 @@ class FinancialSituationMemory:
 
     def add_situations(self, situations_and_advice):
         """Add financial situations and their corresponding advice. Parameter is a list of tuples (situation, rec)"""
+        if not self.enabled:
+            return  # Skip if memory is disabled
 
         situations = []
         advice = []
@@ -46,6 +79,9 @@ class FinancialSituationMemory:
 
     def get_memories(self, current_situation, n_matches=1):
         """Find matching recommendations using OpenAI embeddings"""
+        if not self.enabled:
+            return []  # Return empty list if memory is disabled
+
         query_embedding = self.get_embedding(current_situation)
 
         results = self.situation_collection.query(

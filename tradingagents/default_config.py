@@ -9,10 +9,16 @@ DEFAULT_CONFIG = {
         "dataflows/data_cache",
     ),
     # LLM settings
+    # "llm_provider": "anthropic",  # Options: openai, anthropic, google, ollama, openrouter
+    # "deep_think_llm": "claude-3-5-sonnet-20241022",  # For deep reasoning tasks
+    # "quick_think_llm": "claude-3-5-haiku-20241022",  # For quick tasks
+    # "backend_url": "https://api.anthropic.com",  # Not used for Anthropic, but kept for consistency
     "llm_provider": "openai",
     "deep_think_llm": "o4-mini",
     "quick_think_llm": "gpt-4o-mini",
     "backend_url": "https://api.openai.com/v1",
+    # Memory settings
+    "use_memory": os.getenv("USE_MEMORY", "true").lower() in ("true", "1", "yes"),  # Set to False to disable memory/learning
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,

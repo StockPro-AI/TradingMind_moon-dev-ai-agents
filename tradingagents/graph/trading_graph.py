@@ -51,6 +51,7 @@ class TradingAgentsGraph:
         selected_analysts=["market", "social", "news", "fundamentals"],
         debug=False,
         config: Dict[str, Any] = None,
+        message_callback=None,
     ):
         """Initialize the trading agents graph and components.
 
@@ -58,9 +59,11 @@ class TradingAgentsGraph:
             selected_analysts: List of analyst types to include
             debug: Whether to run in debug mode
             config: Configuration dictionary. If None, uses default config
+            message_callback: Optional callback function to be called with each message (agent_name, content)
         """
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
+        self.message_callback = message_callback
 
         # Update the interface's config
         set_config(self.config)
@@ -168,14 +171,23 @@ class TradingAgentsGraph:
         )
         args = self.propagator.get_graph_args()
 
-        if self.debug:
-            # Debug mode with tracing
+        if self.debug or self.message_callback:
+            # Debug mode or streaming mode with tracing
             trace = []
             for chunk in self.graph.stream(init_agent_state, **args):
                 if len(chunk["messages"]) == 0:
                     pass
                 else:
-                    chunk["messages"][-1].pretty_print()
+                    last_message = chunk["messages"][-1]
+
+                    if self.debug:
+                        last_message.pretty_print()
+
+                    # Call the message callback if provided
+                    if self.message_callback:
+                        # Pass the entire chunk so the callback can parse it properly
+                        self.message_callback(chunk, last_message)
+
                     trace.append(chunk)
 
             final_state = trace[-1]
