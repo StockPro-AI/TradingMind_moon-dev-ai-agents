@@ -9,6 +9,7 @@ from typing import Dict, Any, Tuple, List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_deepseek import ChatDeepSeek
 
 from langgraph.prebuilt import ToolNode
 
@@ -75,9 +76,44 @@ class TradingAgentsGraph:
         )
 
         # Initialize LLMs
-        if self.config["llm_provider"].lower() == "openai" or self.config["llm_provider"] == "ollama" or self.config["llm_provider"] == "openrouter":
-            self.deep_thinking_llm = ChatOpenAI(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
-            self.quick_thinking_llm = ChatOpenAI(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
+        if self.config["llm_provider"].lower() == "deepseek":
+            # Use ChatDeepSeek for DeepSeek provider to avoid parameter incompatibility
+            llm_kwargs = {
+                "model": self.config["deep_think_llm"],
+            }
+            if "api_key" in self.config and self.config["api_key"]:
+                llm_kwargs["api_key"] = self.config["api_key"]
+
+            # Debug logging
+            print(f"🔧 Initializing LLMs with provider: {self.config['llm_provider']}")
+            print(f"🔧 Using ChatDeepSeek for DeepSeek compatibility")
+            print(f"🔧 Deep think model: {llm_kwargs['model']}")
+            print(f"🔧 API key present: {bool(llm_kwargs.get('api_key'))}")
+
+            self.deep_thinking_llm = ChatDeepSeek(**llm_kwargs)
+
+            llm_kwargs["model"] = self.config["quick_think_llm"]
+            print(f"🔧 Quick think model: {llm_kwargs['model']}")
+            self.quick_thinking_llm = ChatDeepSeek(**llm_kwargs)
+        elif self.config["llm_provider"].lower() == "openai" or self.config["llm_provider"] == "ollama" or self.config["llm_provider"] == "openrouter":
+            # Use api_key from config if provided, otherwise LangChain will use environment variable
+            llm_kwargs = {
+                "model": self.config["deep_think_llm"],
+                "base_url": self.config["backend_url"]
+            }
+            if "api_key" in self.config and self.config["api_key"]:
+                llm_kwargs["api_key"] = self.config["api_key"]
+
+            # Debug logging
+            print(f"🔧 Initializing LLMs with provider: {self.config['llm_provider']}")
+            print(f"🔧 Deep think model: {llm_kwargs['model']}, base_url: {llm_kwargs['base_url']}")
+            print(f"🔧 API key present: {bool(llm_kwargs.get('api_key'))}")
+
+            self.deep_thinking_llm = ChatOpenAI(**llm_kwargs)
+
+            llm_kwargs["model"] = self.config["quick_think_llm"]
+            print(f"🔧 Quick think model: {llm_kwargs['model']}")
+            self.quick_thinking_llm = ChatOpenAI(**llm_kwargs)
         elif self.config["llm_provider"].lower() == "anthropic":
             self.deep_thinking_llm = ChatAnthropic(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
             self.quick_thinking_llm = ChatAnthropic(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
@@ -98,7 +134,10 @@ class TradingAgentsGraph:
         self.tool_nodes = self._create_tool_nodes()
 
         # Initialize components
-        self.conditional_logic = ConditionalLogic()
+        self.conditional_logic = ConditionalLogic(
+            max_debate_rounds=self.config.get("max_debate_rounds", 1),
+            max_risk_discuss_rounds=self.config.get("max_risk_discuss_rounds", 1)
+        )
         self.graph_setup = GraphSetup(
             self.quick_thinking_llm,
             self.deep_thinking_llm,
@@ -109,6 +148,7 @@ class TradingAgentsGraph:
             self.invest_judge_memory,
             self.risk_manager_memory,
             self.conditional_logic,
+            self.config,
         )
 
         self.propagator = Propagator()
@@ -171,38 +211,49 @@ class TradingAgentsGraph:
         )
         args = self.propagator.get_graph_args()
 
-        if self.debug or self.message_callback:
-            # Debug mode or streaming mode with tracing
-            trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
-                    last_message = chunk["messages"][-1]
+        try:
+            if self.debug or self.message_callback:
+                # Debug mode or streaming mode with tracing
+                trace = []
+                for chunk in self.graph.stream(init_agent_state, **args):
+                    # Store current state continuously in case of failure
+                    self.curr_state = chunk
 
-                    if self.debug:
-                        last_message.pretty_print()
+                    if len(chunk["messages"]) == 0:
+                        pass
+                    else:
+                        last_message = chunk["messages"][-1]
 
-                    # Call the message callback if provided
-                    if self.message_callback:
-                        # Pass the entire chunk so the callback can parse it properly
-                        self.message_callback(chunk, last_message)
+                        if self.debug:
+                            last_message.pretty_print()
 
-                    trace.append(chunk)
+                        # Call the message callback if provided
+                        if self.message_callback:
+                            # Pass the entire chunk so the callback can parse it properly
+                            self.message_callback(chunk, last_message)
 
-            final_state = trace[-1]
-        else:
-            # Standard mode without tracing
-            final_state = self.graph.invoke(init_agent_state, **args)
+                        trace.append(chunk)
 
-        # Store current state for reflection
-        self.curr_state = final_state
+                final_state = trace[-1]
+            else:
+                # Standard mode without tracing
+                final_state = self.graph.invoke(init_agent_state, **args)
+                self.curr_state = final_state
 
-        # Log state
-        self._log_state(trade_date, final_state)
+            # Log state
+            self._log_state(trade_date, final_state)
 
-        # Return decision and processed signal
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+            # Return decision and processed signal
+            return final_state, self.process_signal(final_state["final_trade_decision"])
+        except Exception as e:
+            # If we have partial state, log it before re-raising
+            if hasattr(self, 'curr_state') and self.curr_state:
+                # Try to log partial state
+                try:
+                    self._log_state(trade_date, self.curr_state)
+                except:
+                    pass  # Ignore logging errors
+            raise
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""

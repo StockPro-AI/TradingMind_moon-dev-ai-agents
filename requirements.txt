@@ -23,4 +23,5 @@ chainlit
 rich
 questionary
 langchain_anthropic
+langchain_deepseek
 langchain-google-genai

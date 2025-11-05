@@ -25,6 +25,7 @@ class GraphSetup:
         invest_judge_memory,
         risk_manager_memory,
         conditional_logic: ConditionalLogic,
+        config: Dict[str, Any] = None,
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
@@ -36,6 +37,7 @@ class GraphSetup:
         self.invest_judge_memory = invest_judge_memory
         self.risk_manager_memory = risk_manager_memory
         self.conditional_logic = conditional_logic
+        self.config = config or {}
 
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
@@ -150,7 +152,18 @@ class GraphSetup:
                 next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
                 workflow.add_edge(current_clear, next_analyst)
             else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+                # Check if both Research Manager and Trader should be skipped (for DeepSeek)
+                if self.config.get("skip_research_manager", False) and self.config.get("skip_trader", False):
+                    # Skip directly to END - just return analyst reports
+                    workflow.add_edge(current_clear, END)
+                # Check if only Research Manager should be skipped
+                elif self.config.get("skip_research_manager", False):
+                    workflow.add_edge(current_clear, "Trader")
+                # Skip debate if max_debate_rounds is 0
+                elif self.conditional_logic.max_debate_rounds == 0:
+                    workflow.add_edge(current_clear, "Research Manager")
+                else:
+                    workflow.add_edge(current_clear, "Bull Researcher")
 
         # Add remaining edges
         workflow.add_conditional_edges(

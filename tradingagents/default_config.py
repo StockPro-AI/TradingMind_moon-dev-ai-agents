@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     # "quick_think_llm": "claude-3-5-haiku-20241022",  # For quick tasks
     # "backend_url": "https://api.anthropic.com",  # Not used for Anthropic, but kept for consistency
     "llm_provider": "openai",
-    "deep_think_llm": "o4-mini",
+    "deep_think_llm": "gpt-4o",
     "quick_think_llm": "gpt-4o-mini",
     "backend_url": "https://api.openai.com/v1",
     # Memory settings

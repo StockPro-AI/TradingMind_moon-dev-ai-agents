@@ -125,12 +125,22 @@ class AnalysisRequest(BaseModel):
     ticker: str
     date: str  # Format: YYYY-MM-DD
     config: Optional[Dict[str, Any]] = None
+    compare_providers: Optional[bool] = False  # If True, run with both OpenAI and DeepSeek
 
 
 class AnalysisResponse(BaseModel):
     ticker: str
     date: str
     decision: str
+    status: str
+    message: Optional[str] = None
+
+
+class ComparisonAnalysisResponse(BaseModel):
+    ticker: str
+    date: str
+    openai_result: Optional[Dict[str, Any]] = None
+    deepseek_result: Optional[Dict[str, Any]] = None
     status: str
     message: Optional[str] = None
 
@@ -255,8 +265,30 @@ async def analyze_stock(request: AnalysisRequest):
         # Use custom config or default
         config = request.config if request.config else DEFAULT_CONFIG.copy()
 
-        # Generate cache key
-        cache_key = generate_cache_key(request.ticker, request.date)
+        # Generate cache key with provider if specified
+        provider = config.get('llm_provider', DEFAULT_CONFIG.get('llm_provider', 'openai'))
+
+        # Configure provider-specific settings
+        if provider == "deepseek":
+            config["backend_url"] = "https://api.deepseek.com/v1"
+            config["deep_think_llm"] = "deepseek-chat"
+            config["quick_think_llm"] = "deepseek-chat"
+            config["api_key"] = os.getenv("DEEPSEEK_API_KEY")
+            config["llm_provider"] = "deepseek"
+            # Disable debate rounds for DeepSeek to avoid API compatibility issues
+            config["max_debate_rounds"] = 0
+            config["max_risk_discuss_rounds"] = 0
+            # Skip Research Manager and Trader for DeepSeek due to API compatibility issues
+            config["skip_research_manager"] = True
+            config["skip_trader"] = True
+        elif provider == "openai":
+            config["backend_url"] = "https://api.openai.com/v1"
+            config["deep_think_llm"] = "gpt-4o"
+            config["quick_think_llm"] = "gpt-4o-mini"
+            config["api_key"] = os.getenv("OPENAI_API_KEY")
+            config["llm_provider"] = "openai"
+
+        cache_key = f"analysis:{request.ticker}:{request.date}:{provider}"
 
         # Check cache first
         cached_result = get_cached_result(cache_key)
@@ -275,14 +307,43 @@ async def analyze_stock(request: AnalysisRequest):
         # No cache found, run complete analysis
         debug_log(f"🔄 Running fresh analysis for {request.ticker} on {request.date}")
 
-        # Initialize trading graph
-        ta = TradingAgentsGraph(debug=False, config=config)
+        # Initialize trading graph with appropriate analysts based on provider
+        if provider == "deepseek":
+            # For DeepSeek, only use market and social analysts to avoid API compatibility issues
+            selected_analysts = ["market", "social"]
+            print(f"🔧 DeepSeek: Using analysts: {selected_analysts}")
+        else:
+            # For other providers, use all analysts
+            selected_analysts = ["market", "social", "news", "fundamentals"]
 
-        # Run analysis
-        final_state, decision = ta.propagate(request.ticker, request.date)
+        ta = TradingAgentsGraph(debug=False, config=config, selected_analysts=selected_analysts)
+
+        # Run analysis - handle partial failures gracefully
+        try:
+            final_state, decision = ta.propagate(request.ticker, request.date)
+        except Exception as e:
+            # If analysis fails for any reason, check if we have partial results
+            print(f"⚠️ Analysis failed during execution: {str(e)}")
+            # Check if we have any partial state stored
+            if hasattr(ta, 'curr_state') and ta.curr_state:
+                print("✅ Found partial results, continuing with available data")
+                final_state = ta.curr_state
+                # Try to get decision from partial state
+                if final_state.get("final_trade_decision"):
+                    decision = ta.process_signal(final_state["final_trade_decision"])
+                else:
+                    decision = "HOLD"  # Default decision if not available
+            else:
+                # No partial state available, re-raise the exception
+                print("❌ No partial state available, re-raising exception")
+                raise
 
         # Get log_states_dict which contains all the structured data
+        # If we don't have log_data, try to extract from final_state
         log_data = ta.log_states_dict.get(request.date, {})
+        if not log_data and final_state:
+            # Use final_state directly if log_states_dict is empty
+            log_data = final_state
 
         # DEBUG: Check if log_states_dict has data
         debug_log(f"DEBUG: log_states_dict keys: {list(ta.log_states_dict.keys())}")
@@ -351,26 +412,34 @@ async def analyze_stock(request: AnalysisRequest):
                         "content": content_str
                     })
 
-        # Process each agent's output
+        # Process each agent's output - add N/A for missing reports
         if log_data.get("market_report"):
             market_text = extract_text(log_data["market_report"])
             debug_log(f"DEBUG: Market report extracted, length: {len(market_text)}")
             categorize_by_headers("Market Analyst", market_text)
+        else:
+            categorized_content["Market Analysis"] = [{"agent": "Market Analyst", "content": "Data not available"}]
 
         if log_data.get("sentiment_report"):
             sentiment_text = extract_text(log_data["sentiment_report"])
             debug_log(f"DEBUG: Sentiment report extracted, length: {len(sentiment_text)}")
             categorize_by_headers("Social Analyst", sentiment_text)
+        else:
+            categorized_content["Sentiment Analysis"] = [{"agent": "Social Analyst", "content": "Data not available"}]
 
         if log_data.get("news_report"):
             news_text = extract_text(log_data["news_report"])
             debug_log(f"DEBUG: News report extracted, length: {len(news_text)}")
             categorize_by_headers("News Analyst", news_text)
+        else:
+            categorized_content["News Analysis"] = [{"agent": "News Analyst", "content": "Data not available"}]
 
         if log_data.get("fundamentals_report"):
             fundamentals_text = extract_text(log_data["fundamentals_report"])
             debug_log(f"DEBUG: Fundamentals report extracted, length: {len(fundamentals_text)}")
             categorize_by_headers("Fundamentals Analyst", fundamentals_text)
+        else:
+            categorized_content["Fundamental Analysis"] = [{"agent": "Fundamentals Analyst", "content": "Data not available"}]
 
         # Investment debate
         debate_state = log_data.get("investment_debate_state", {})
@@ -431,7 +500,323 @@ async def analyze_stock(request: AnalysisRequest):
         return response_data
     except Exception as e:
         import traceback
-        print(f"Error in analyze_stock: {traceback.format_exc()}")
+        error_traceback = traceback.format_exc()
+        print(f"Error in analyze_stock: {error_traceback}")
+
+        # Try to return partial results if available
+        if 'ta' in locals() and hasattr(ta, 'curr_state') and ta.curr_state:
+            print("⚠️ Analysis failed but returning partial results")
+            try:
+                final_state = ta.curr_state
+                decision = ta.process_signal(final_state.get("final_trade_decision")) if final_state.get("final_trade_decision") else "HOLD"
+
+                log_data = ta.log_states_dict.get(request.date, {}) or final_state
+                categorized_content = {}
+
+                # Add available data with N/A for missing
+                if log_data.get("market_report"):
+                    categorized_content["Market Analysis"] = [{"agent": "Market Analyst", "content": str(log_data["market_report"])}]
+                else:
+                    categorized_content["Market Analysis"] = [{"agent": "Market Analyst", "content": "Data not available"}]
+
+                if log_data.get("sentiment_report"):
+                    categorized_content["Sentiment Analysis"] = [{"agent": "Social Analyst", "content": str(log_data["sentiment_report"])}]
+                else:
+                    categorized_content["Sentiment Analysis"] = [{"agent": "Social Analyst", "content": "Data not available"}]
+
+                if log_data.get("news_report"):
+                    categorized_content["News Analysis"] = [{"agent": "News Analyst", "content": str(log_data["news_report"])}]
+                else:
+                    categorized_content["News Analysis"] = [{"agent": "News Analyst", "content": "Data not available"}]
+
+                if log_data.get("fundamentals_report"):
+                    categorized_content["Fundamental Analysis"] = [{"agent": "Fundamentals Analyst", "content": str(log_data["fundamentals_report"])}]
+                else:
+                    categorized_content["Fundamental Analysis"] = [{"agent": "Fundamentals Analyst", "content": "Data not available"}]
+
+                return {
+                    "ticker": request.ticker,
+                    "date": request.date,
+                    "decision": decision,
+                    "categorizedContent": categorized_content,
+                    "status": "partial",
+                    "message": f"Analysis partially completed with errors: {str(e)}",
+                    "cached_at": datetime.now().isoformat()
+                }
+            except Exception as partial_error:
+                print(f"Failed to extract partial results: {partial_error}")
+
+        # If no partial results available, raise the error
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/compare")
+async def compare_analysis(request: AnalysisRequest):
+    """
+    Run analysis with both OpenAI and DeepSeek providers and return comparison
+
+    This endpoint:
+    1. Runs complete analysis with OpenAI configuration
+    2. Runs complete analysis with DeepSeek configuration
+    3. Returns both results for side-by-side comparison
+    4. Caches both results independently
+
+    Returns:
+        {
+            "ticker": str,
+            "date": str,
+            "openai_result": {
+                "decision": str,
+                "categorizedContent": {...},
+                "provider": "openai"
+            },
+            "deepseek_result": {
+                "decision": str,
+                "categorizedContent": {...},
+                "provider": "deepseek"
+            },
+            "status": "success",
+            "message": str
+        }
+    """
+    try:
+        ticker = request.ticker
+        date = request.date
+        base_config = request.config if request.config else DEFAULT_CONFIG.copy()
+
+        # Helper function to run analysis with specific provider
+        async def run_with_provider(provider_name: str, llm_config: str):
+            config = base_config.copy()
+            config["llm_provider"] = provider_name
+
+            # Configure provider-specific settings
+            if provider_name == "deepseek":
+                config["backend_url"] = "https://api.deepseek.com/v1"
+                config["deep_think_llm"] = "deepseek-chat"
+                config["quick_think_llm"] = "deepseek-chat"
+                config["api_key"] = os.getenv("DEEPSEEK_API_KEY")
+                config["llm_provider"] = "deepseek"
+                # Disable debate rounds for DeepSeek to avoid API compatibility issues
+                config["max_debate_rounds"] = 0
+                config["max_risk_discuss_rounds"] = 0
+                # Skip Research Manager and Trader for DeepSeek due to API compatibility issues
+                config["skip_research_manager"] = True
+                config["skip_trader"] = True
+            elif provider_name == "openai":
+                config["backend_url"] = "https://api.openai.com/v1"
+                config["deep_think_llm"] = "gpt-4o"
+                config["quick_think_llm"] = "gpt-4o-mini"
+                config["api_key"] = os.getenv("OPENAI_API_KEY")
+                config["llm_provider"] = "openai"
+
+            cache_key = f"analysis:{ticker}:{date}:{provider_name}"
+
+            # Check cache first
+            cached_result = get_cached_result(cache_key)
+            if cached_result:
+                debug_log(f"✅ Cache hit for {provider_name}: {cache_key}")
+                return cached_result
+
+            debug_log(f"🔄 Running {provider_name} analysis for {ticker} on {date}")
+
+            # Initialize trading graph with appropriate analysts based on provider
+            if provider_name == "deepseek":
+                # For DeepSeek, only use market and social analysts to avoid API compatibility issues
+                selected_analysts = ["market", "social"]
+                print(f"🔧 DeepSeek: Using analysts: {selected_analysts}")
+            else:
+                # For other providers, use all analysts
+                selected_analysts = ["market", "social", "news", "fundamentals"]
+
+            # Run analysis - handle partial failures gracefully
+            ta = TradingAgentsGraph(debug=False, config=config, selected_analysts=selected_analysts)
+            try:
+                final_state, decision = ta.propagate(ticker, date)
+            except Exception as e:
+                # If analysis fails for any reason, check if we have partial results
+                print(f"⚠️ {provider_name} analysis failed during execution: {str(e)}")
+                # Check if we have any partial state stored
+                if hasattr(ta, 'curr_state') and ta.curr_state:
+                    print(f"✅ Found partial results for {provider_name}, continuing with available data")
+                    final_state = ta.curr_state
+                    # Try to get decision from partial state
+                    if final_state.get("final_trade_decision"):
+                        decision = ta.process_signal(final_state["final_trade_decision"])
+                    else:
+                        decision = "HOLD"  # Default decision if not available
+                else:
+                    # No partial state available, re-raise the exception
+                    print(f"❌ No partial state available for {provider_name}, re-raising exception")
+                    raise
+
+            # Extract and categorize
+            log_data = ta.log_states_dict.get(date, {})
+            if not log_data and final_state:
+                # Use final_state directly if log_states_dict is empty
+                log_data = final_state
+            categorized_content = {}
+
+            def extract_text(value):
+                if value is None:
+                    return ""
+                if isinstance(value, str):
+                    return value
+                if hasattr(value, 'content'):
+                    content = value.content
+                    if isinstance(content, list):
+                        return '\n'.join([item.get('text', '') if isinstance(item, dict) else str(item) for item in content])
+                    return str(content)
+                return str(value)
+
+            def categorize_by_headers(agent_name: str, content: str):
+                if not content:
+                    return
+
+                lines = content.split('\n')
+                current_category = None
+                current_content = []
+
+                for line in lines:
+                    import re
+                    header_match = re.match(r'^(#{1,3})\s+(.+)$', line.strip())
+
+                    if header_match:
+                        if current_category and current_content:
+                            content_str = '\n'.join(current_content).strip()
+                            if content_str:
+                                if current_category not in categorized_content:
+                                    categorized_content[current_category] = []
+                                categorized_content[current_category].append({
+                                    "agent": agent_name,
+                                    "content": content_str
+                                })
+
+                        current_category = header_match.group(2).strip()
+                        current_content = []
+                    elif current_category:
+                        current_content.append(line)
+
+                if current_category and current_content:
+                    content_str = '\n'.join(current_content).strip()
+                    if content_str:
+                        if current_category not in categorized_content:
+                            categorized_content[current_category] = []
+                        categorized_content[current_category].append({
+                            "agent": agent_name,
+                            "content": content_str
+                        })
+
+            # Process each agent's output - add N/A for missing reports
+            if log_data.get("market_report"):
+                categorize_by_headers("Market Analyst", extract_text(log_data["market_report"]))
+            else:
+                categorized_content["Market Analysis"] = [{"agent": "Market Analyst", "content": "Data not available"}]
+
+            if log_data.get("sentiment_report"):
+                categorize_by_headers("Social Analyst", extract_text(log_data["sentiment_report"]))
+            else:
+                categorized_content["Sentiment Analysis"] = [{"agent": "Social Analyst", "content": "Data not available"}]
+
+            if log_data.get("news_report"):
+                categorize_by_headers("News Analyst", extract_text(log_data["news_report"]))
+            else:
+                categorized_content["News Analysis"] = [{"agent": "News Analyst", "content": "Data not available"}]
+
+            if log_data.get("fundamentals_report"):
+                categorize_by_headers("Fundamentals Analyst", extract_text(log_data["fundamentals_report"]))
+            else:
+                categorized_content["Fundamental Analysis"] = [{"agent": "Fundamentals Analyst", "content": "Data not available"}]
+
+            debate_state = log_data.get("investment_debate_state", {})
+            if debate_state.get("judge_decision"):
+                categorize_by_headers("Research Manager", extract_text(debate_state["judge_decision"]))
+
+            if log_data.get("trader_investment_decision"):
+                categorize_by_headers("Trader", extract_text(log_data["trader_investment_decision"]))
+
+            risk_state = log_data.get("risk_debate_state", {})
+            if risk_state.get("judge_decision"):
+                categorize_by_headers("Risk Manager", extract_text(risk_state["judge_decision"]))
+
+            if log_data.get("final_trade_decision"):
+                categorize_by_headers("Portfolio Manager", extract_text(log_data["final_trade_decision"]))
+
+            # Prepare result
+            result = {
+                "decision": decision,
+                "categorizedContent": categorized_content,
+                "provider": provider_name,
+                "cached_at": datetime.now().isoformat()
+            }
+
+            # Cache result
+            set_cached_result(cache_key, result)
+
+            return result
+
+        # Run both analyses
+        openai_result = await run_with_provider("openai", "gpt-4")
+        deepseek_result = await run_with_provider("deepseek", "deepseek-chat")
+
+        return {
+            "ticker": ticker,
+            "date": date,
+            "openai_result": openai_result,
+            "deepseek_result": deepseek_result,
+            "status": "success",
+            "message": f"Comparison analysis completed for {ticker}"
+        }
+
+    except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"Error in compare_analysis: {error_traceback}")
+
+        # Try to return partial results if available
+        # Check if we have results from either provider
+        partial_response = {
+            "ticker": request.ticker,
+            "date": request.date,
+            "status": "partial",
+            "message": f"Comparison analysis partially completed with errors: {str(e)}"
+        }
+
+        has_partial_results = False
+
+        # Check if openai_result exists
+        if 'openai_result' in locals() and openai_result:
+            partial_response["openai_result"] = openai_result
+            has_partial_results = True
+            print("✅ Returning partial OpenAI results")
+        else:
+            # Try to extract from OpenAI provider if it failed mid-execution
+            partial_response["openai_result"] = {
+                "decision": "HOLD",
+                "categorizedContent": {"Error": [{"agent": "System", "content": "OpenAI analysis could not be completed"}]},
+                "provider": "openai",
+                "cached_at": datetime.now().isoformat()
+            }
+
+        # Check if deepseek_result exists
+        if 'deepseek_result' in locals() and deepseek_result:
+            partial_response["deepseek_result"] = deepseek_result
+            has_partial_results = True
+            print("✅ Returning partial DeepSeek results")
+        else:
+            # Try to extract from DeepSeek provider if it failed mid-execution
+            partial_response["deepseek_result"] = {
+                "decision": "HOLD",
+                "categorizedContent": {"Error": [{"agent": "System", "content": "DeepSeek analysis could not be completed"}]},
+                "provider": "deepseek",
+                "cached_at": datetime.now().isoformat()
+            }
+
+        # If we have at least one partial result, return it
+        if has_partial_results:
+            print(f"⚠️ Comparison analysis failed but returning partial results")
+            return partial_response
+
+        # If no partial results available, raise the error
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -6,11 +6,13 @@ import json
 def create_trader(llm, memory):
     def trader_node(state, name):
         company_name = state["company_of_interest"]
-        investment_plan = state["investment_plan"]
-        market_research_report = state["market_report"]
-        sentiment_report = state["sentiment_report"]
-        news_report = state["news_report"]
-        fundamentals_report = state["fundamentals_report"]
+        # Handle missing investment_plan when Research Manager is skipped (e.g., for DeepSeek)
+        investment_plan = state.get("investment_plan", None)
+        # Handle missing reports safely (some analysts may be skipped)
+        market_research_report = state.get("market_report", "Market analysis not available.")
+        sentiment_report = state.get("sentiment_report", "Sentiment analysis not available.")
+        news_report = state.get("news_report", "News analysis not available.")
+        fundamentals_report = state.get("fundamentals_report", "Fundamentals analysis not available.")
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -22,10 +24,18 @@ def create_trader(llm, memory):
         else:
             past_memory_str = "No past memories found."
 
-        context = {
-            "role": "user",
-            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
-        }
+        # Build context based on whether investment_plan exists
+        if investment_plan:
+            context = {
+                "role": "user",
+                "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
+            }
+        else:
+            # When no investment plan (Research Manager skipped), use direct analyst reports
+            context = {
+                "role": "user",
+                "content": f"Based on analysis by our team of analysts for {company_name}, here are the key insights:\n\n{curr_situation}\n\nBased on these insights, make an informed trading decision.",
+            }
 
         messages = [
             {
