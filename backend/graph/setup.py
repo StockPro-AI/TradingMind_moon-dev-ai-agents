@@ -5,8 +5,8 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, START
 from langgraph.prebuilt import ToolNode
 
-from tradingagents.agents import *
-from tradingagents.agents.utils.agent_states import AgentState
+from backend.agents import *
+from backend.agents.utils.agent_states import AgentState
 
 from .conditional_logic import ConditionalLogic
 

@@ -36,12 +36,18 @@ if not os.getenv('ANTHROPIC_API_KEY') and not os.getenv('OPENAI_API_KEY'):
     print("WARNING: No ANTHROPIC_API_KEY or OPENAI_API_KEY found in environment!")
     print(f"Looking for .env at: {env_path}")
 
-# Add parent directory to path to import tradingagents
+# Add parent directory to path to import backend
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
-from api.utils import extract_text, categorize_by_headers, process_analysis_reports
+from backend.graph.trading_graph import TradingAgentsGraph
+from backend.default_config import DEFAULT_CONFIG
+from api.utils import (
+    extract_text,
+    categorize_by_headers,
+    process_analysis_reports,
+    configure_provider,
+    get_selected_analysts,
+)
 
 app = FastAPI(
     title="TradingAgents API",
@@ -271,24 +277,7 @@ async def analyze_stock(request: AnalysisRequest):
         provider = config.get('llm_provider', DEFAULT_CONFIG.get('llm_provider', 'openai'))
 
         # Configure provider-specific settings
-        if provider == "deepseek":
-            config["backend_url"] = "https://api.deepseek.com/v1"
-            config["deep_think_llm"] = "deepseek-chat"
-            config["quick_think_llm"] = "deepseek-chat"
-            config["api_key"] = os.getenv("DEEPSEEK_API_KEY")
-            config["llm_provider"] = "deepseek"
-            # Disable debate rounds for DeepSeek to avoid API compatibility issues
-            config["max_debate_rounds"] = 0
-            config["max_risk_discuss_rounds"] = 0
-            # Skip Research Manager and Trader for DeepSeek due to API compatibility issues
-            config["skip_research_manager"] = True
-            config["skip_trader"] = True
-        elif provider == "openai":
-            config["backend_url"] = "https://api.openai.com/v1"
-            config["deep_think_llm"] = "gpt-4o"
-            config["quick_think_llm"] = "gpt-4o-mini"
-            config["api_key"] = os.getenv("OPENAI_API_KEY")
-            config["llm_provider"] = "openai"
+        configure_provider(config, provider)
 
         cache_key = f"analysis:{request.ticker}:{request.date}:{provider}"
 
@@ -310,13 +299,8 @@ async def analyze_stock(request: AnalysisRequest):
         debug_log(f"🔄 Running fresh analysis for {request.ticker} on {request.date}")
 
         # Initialize trading graph with appropriate analysts based on provider
-        if provider == "deepseek":
-            # For DeepSeek, only use market and social analysts to avoid API compatibility issues
-            selected_analysts = ["market", "social"]
-            print(f"🔧 DeepSeek: Using analysts: {selected_analysts}")
-        else:
-            # For other providers, use all analysts
-            selected_analysts = ["market", "social", "news", "fundamentals"]
+        selected_analysts = get_selected_analysts(provider)
+        debug_log(f"Using analysts: {selected_analysts}")
 
         ta = TradingAgentsGraph(debug=False, config=config, selected_analysts=selected_analysts)
 
@@ -353,128 +337,10 @@ async def analyze_stock(request: AnalysisRequest):
         debug_log(f"DEBUG: log_data keys: {list(log_data.keys()) if log_data else 'EMPTY'}")
         debug_log(f"DEBUG: log_data is empty: {not log_data}")
 
-        # Parse and categorize content from log_states_dict
+        # Parse and categorize content from log_states_dict using utility function
         categorized_content = {}
-
-        def extract_text(value):
-            """Extract string from various formats"""
-            if value is None:
-                return ""
-            if isinstance(value, str):
-                return value
-            if hasattr(value, 'content'):
-                content = value.content
-                if isinstance(content, list):
-                    return '\n'.join([item.get('text', '') if isinstance(item, dict) else str(item) for item in content])
-                return str(content)
-            return str(value)
-
-        def categorize_by_headers(agent_name: str, content: str):
-            """Parse content and organize by markdown headers"""
-            if not content:
-                return
-
-            lines = content.split('\n')
-            current_category = None
-            current_content = []
-
-            for line in lines:
-                # Check if line is a markdown header
-                header_match = line.strip().match(r'^(#{1,3})\s+(.+)$') if hasattr(line.strip(), 'match') else None
-                if not header_match:
-                    import re
-                    header_match = re.match(r'^(#{1,3})\s+(.+)$', line.strip())
-
-                if header_match:
-                    # Save previous category
-                    if current_category and current_content:
-                        content_str = '\n'.join(current_content).strip()
-                        if content_str:
-                            if current_category not in categorized_content:
-                                categorized_content[current_category] = []
-                            categorized_content[current_category].append({
-                                "agent": agent_name,
-                                "content": content_str
-                            })
-
-                    # Start new category
-                    current_category = header_match.group(2).strip()
-                    current_content = []
-                elif current_category:
-                    current_content.append(line)
-
-            # Save last category
-            if current_category and current_content:
-                content_str = '\n'.join(current_content).strip()
-                if content_str:
-                    if current_category not in categorized_content:
-                        categorized_content[current_category] = []
-                    categorized_content[current_category].append({
-                        "agent": agent_name,
-                        "content": content_str
-                    })
-
-        # Process each agent's output - add N/A for missing reports
-        if log_data.get("market_report"):
-            market_text = extract_text(log_data["market_report"])
-            debug_log(f"DEBUG: Market report extracted, length: {len(market_text)}")
-            categorize_by_headers("Market Analyst", market_text)
-        else:
-            categorized_content["Market Analysis"] = [{"agent": "Market Analyst", "content": "Data not available"}]
-
-        if log_data.get("sentiment_report"):
-            sentiment_text = extract_text(log_data["sentiment_report"])
-            debug_log(f"DEBUG: Sentiment report extracted, length: {len(sentiment_text)}")
-            categorize_by_headers("Social Analyst", sentiment_text)
-        else:
-            categorized_content["Sentiment Analysis"] = [{"agent": "Social Analyst", "content": "Data not available"}]
-
-        if log_data.get("news_report"):
-            news_text = extract_text(log_data["news_report"])
-            debug_log(f"DEBUG: News report extracted, length: {len(news_text)}")
-            categorize_by_headers("News Analyst", news_text)
-        else:
-            categorized_content["News Analysis"] = [{"agent": "News Analyst", "content": "Data not available"}]
-
-        if log_data.get("fundamentals_report"):
-            fundamentals_text = extract_text(log_data["fundamentals_report"])
-            debug_log(f"DEBUG: Fundamentals report extracted, length: {len(fundamentals_text)}")
-            categorize_by_headers("Fundamentals Analyst", fundamentals_text)
-        else:
-            categorized_content["Fundamental Analysis"] = [{"agent": "Fundamentals Analyst", "content": "Data not available"}]
-
-        # Investment debate
-        debate_state = log_data.get("investment_debate_state", {})
-        if debate_state.get("judge_decision"):
-            judge_text = extract_text(debate_state["judge_decision"])
-            debug_log(f"DEBUG: Investment judge decision extracted, length: {len(judge_text)}")
-            categorize_by_headers("Research Manager", judge_text)
-
-        # Trader
-        if log_data.get("trader_investment_decision"):
-            trader_text = extract_text(log_data["trader_investment_decision"])
-            debug_log(f"DEBUG: Trader decision extracted, length: {len(trader_text)}")
-            categorize_by_headers("Trader", trader_text)
-
-        # Risk debate
-        risk_state = log_data.get("risk_debate_state", {})
-        if risk_state.get("judge_decision"):
-            risk_judge_text = extract_text(risk_state["judge_decision"])
-            debug_log(f"DEBUG: Risk judge decision extracted, length: {len(risk_judge_text)}")
-            categorize_by_headers("Risk Manager", risk_judge_text)
-
-        # Final decision
-        if log_data.get("final_trade_decision"):
-            final_text = extract_text(log_data["final_trade_decision"])
-            debug_log(f"DEBUG: Final decision extracted, length: {len(final_text)}")
-            categorize_by_headers("Portfolio Manager", final_text)
-
-        # DEBUG: Check categorization results
-        debug_log(f"DEBUG: categorized_content keys: {list(categorized_content.keys())}")
-        debug_log(f"DEBUG: categorized_content is empty: {not categorized_content}")
-        debug_log(f"DEBUG: Number of categories: {len(categorized_content)}")
-        for category, items in categorized_content.items():
-            debug_log(f"DEBUG: Category '{category}' has {len(items)} items")
+        process_analysis_reports(log_data, categorized_content)
+        debug_log(f"DEBUG: Processed {len(categorized_content)} categories")
 
         # Cache the result
         cached_at = datetime.now().isoformat()
@@ -589,27 +455,7 @@ async def compare_analysis(request: AnalysisRequest):
         # Helper function to run analysis with specific provider
         async def run_with_provider(provider_name: str, llm_config: str):
             config = base_config.copy()
-            config["llm_provider"] = provider_name
-
-            # Configure provider-specific settings
-            if provider_name == "deepseek":
-                config["backend_url"] = "https://api.deepseek.com/v1"
-                config["deep_think_llm"] = "deepseek-chat"
-                config["quick_think_llm"] = "deepseek-chat"
-                config["api_key"] = os.getenv("DEEPSEEK_API_KEY")
-                config["llm_provider"] = "deepseek"
-                # Disable debate rounds for DeepSeek to avoid API compatibility issues
-                config["max_debate_rounds"] = 0
-                config["max_risk_discuss_rounds"] = 0
-                # Skip Research Manager and Trader for DeepSeek due to API compatibility issues
-                config["skip_research_manager"] = True
-                config["skip_trader"] = True
-            elif provider_name == "openai":
-                config["backend_url"] = "https://api.openai.com/v1"
-                config["deep_think_llm"] = "gpt-4o"
-                config["quick_think_llm"] = "gpt-4o-mini"
-                config["api_key"] = os.getenv("OPENAI_API_KEY")
-                config["llm_provider"] = "openai"
+            configure_provider(config, provider_name)
 
             cache_key = f"analysis:{ticker}:{date}:{provider_name}"
 
@@ -622,13 +468,8 @@ async def compare_analysis(request: AnalysisRequest):
             debug_log(f"🔄 Running {provider_name} analysis for {ticker} on {date}")
 
             # Initialize trading graph with appropriate analysts based on provider
-            if provider_name == "deepseek":
-                # For DeepSeek, only use market and social analysts to avoid API compatibility issues
-                selected_analysts = ["market", "social"]
-                print(f"🔧 DeepSeek: Using analysts: {selected_analysts}")
-            else:
-                # For other providers, use all analysts
-                selected_analysts = ["market", "social", "news", "fundamentals"]
+            selected_analysts = get_selected_analysts(provider_name)
+            debug_log(f"Using analysts for {provider_name}: {selected_analysts}")
 
             # Run analysis - handle partial failures gracefully
             ta = TradingAgentsGraph(debug=False, config=config, selected_analysts=selected_analysts)
@@ -636,10 +477,10 @@ async def compare_analysis(request: AnalysisRequest):
                 final_state, decision = ta.propagate(ticker, date)
             except Exception as e:
                 # If analysis fails for any reason, check if we have partial results
-                print(f"⚠️ {provider_name} analysis failed during execution: {str(e)}")
+                debug_log(f"⚠️ {provider_name} analysis failed during execution: {str(e)}")
                 # Check if we have any partial state stored
                 if hasattr(ta, 'curr_state') and ta.curr_state:
-                    print(f"✅ Found partial results for {provider_name}, continuing with available data")
+                    debug_log(f"✅ Found partial results for {provider_name}, continuing with available data")
                     final_state = ta.curr_state
                     # Try to get decision from partial state
                     if final_state.get("final_trade_decision"):
@@ -648,100 +489,15 @@ async def compare_analysis(request: AnalysisRequest):
                         decision = "HOLD"  # Default decision if not available
                 else:
                     # No partial state available, re-raise the exception
-                    print(f"❌ No partial state available for {provider_name}, re-raising exception")
+                    debug_log(f"❌ No partial state available for {provider_name}, re-raising exception")
                     raise
 
-            # Extract and categorize
+            # Extract and categorize using utility functions
             log_data = ta.log_states_dict.get(date, {})
             if not log_data and final_state:
-                # Use final_state directly if log_states_dict is empty
                 log_data = final_state
             categorized_content = {}
-
-            def extract_text(value):
-                if value is None:
-                    return ""
-                if isinstance(value, str):
-                    return value
-                if hasattr(value, 'content'):
-                    content = value.content
-                    if isinstance(content, list):
-                        return '\n'.join([item.get('text', '') if isinstance(item, dict) else str(item) for item in content])
-                    return str(content)
-                return str(value)
-
-            def categorize_by_headers(agent_name: str, content: str):
-                if not content:
-                    return
-
-                lines = content.split('\n')
-                current_category = None
-                current_content = []
-
-                for line in lines:
-                    import re
-                    header_match = re.match(r'^(#{1,3})\s+(.+)$', line.strip())
-
-                    if header_match:
-                        if current_category and current_content:
-                            content_str = '\n'.join(current_content).strip()
-                            if content_str:
-                                if current_category not in categorized_content:
-                                    categorized_content[current_category] = []
-                                categorized_content[current_category].append({
-                                    "agent": agent_name,
-                                    "content": content_str
-                                })
-
-                        current_category = header_match.group(2).strip()
-                        current_content = []
-                    elif current_category:
-                        current_content.append(line)
-
-                if current_category and current_content:
-                    content_str = '\n'.join(current_content).strip()
-                    if content_str:
-                        if current_category not in categorized_content:
-                            categorized_content[current_category] = []
-                        categorized_content[current_category].append({
-                            "agent": agent_name,
-                            "content": content_str
-                        })
-
-            # Process each agent's output - add N/A for missing reports
-            if log_data.get("market_report"):
-                categorize_by_headers("Market Analyst", extract_text(log_data["market_report"]))
-            else:
-                categorized_content["Market Analysis"] = [{"agent": "Market Analyst", "content": "Data not available"}]
-
-            if log_data.get("sentiment_report"):
-                categorize_by_headers("Social Analyst", extract_text(log_data["sentiment_report"]))
-            else:
-                categorized_content["Sentiment Analysis"] = [{"agent": "Social Analyst", "content": "Data not available"}]
-
-            if log_data.get("news_report"):
-                categorize_by_headers("News Analyst", extract_text(log_data["news_report"]))
-            else:
-                categorized_content["News Analysis"] = [{"agent": "News Analyst", "content": "Data not available"}]
-
-            if log_data.get("fundamentals_report"):
-                categorize_by_headers("Fundamentals Analyst", extract_text(log_data["fundamentals_report"]))
-            else:
-                categorized_content["Fundamental Analysis"] = [{"agent": "Fundamentals Analyst", "content": "Data not available"}]
-
-            debate_state = log_data.get("investment_debate_state", {})
-            if debate_state.get("judge_decision"):
-                categorize_by_headers("Research Manager", extract_text(debate_state["judge_decision"]))
-
-            if log_data.get("trader_investment_decision"):
-                categorize_by_headers("Trader", extract_text(log_data["trader_investment_decision"]))
-
-            risk_state = log_data.get("risk_debate_state", {})
-            if risk_state.get("judge_decision"):
-                categorize_by_headers("Risk Manager", extract_text(risk_state["judge_decision"]))
-
-            if log_data.get("final_trade_decision"):
-                categorize_by_headers("Portfolio Manager", extract_text(log_data["final_trade_decision"]))
+            process_analysis_reports(log_data, categorized_content)
 
             # Prepare result
             result = {

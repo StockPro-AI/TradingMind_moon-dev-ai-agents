@@ -1,6 +1,9 @@
 from langchain_core.tools import tool
 from typing import Annotated
-from tradingagents.dataflows.interface import route_to_vendor
+import logging
+from backend.dataflows.interface import route_to_vendor
+
+logger = logging.getLogger('backend.agents.utils.news_data_tools')
 
 @tool
 def get_news(
@@ -40,7 +43,7 @@ def get_global_news(
         return route_to_vendor("get_global_news", curr_date, look_back_days, limit)
     except RuntimeError as e:
         # If all vendors fail, return a message instead of crashing
-        print(f"⚠️ Global news data unavailable: {e}")
+        logger.warning(f"Global news data unavailable: {e}")
         return "Global news data is currently unavailable due to API errors. Analysis will continue with available data sources."
 
 @tool
@@ -60,7 +63,7 @@ def get_insider_sentiment(
     try:
         return route_to_vendor("get_insider_sentiment", ticker, curr_date)
     except RuntimeError as e:
-        print(f"⚠️ Insider sentiment data unavailable for {ticker}: {e}")
+        logger.warning(f"Insider sentiment data unavailable for {ticker}: {e}")
         return f"Insider sentiment data is currently unavailable for {ticker} due to API errors."
 
 @tool
@@ -80,5 +83,5 @@ def get_insider_transactions(
     try:
         return route_to_vendor("get_insider_transactions", ticker, curr_date)
     except RuntimeError as e:
-        print(f"⚠️ Insider transaction data unavailable for {ticker}: {e}")
+        logger.warning(f"Insider transaction data unavailable for {ticker}: {e}")
         return f"Insider transaction data is currently unavailable for {ticker} due to API errors."

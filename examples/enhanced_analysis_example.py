@@ -16,11 +16,11 @@ All using FREE data sources only!
 import sys
 sys.path.insert(0, '..')
 
-from tradingagents.backtesting import BacktestEngine, PerformanceMetrics
-from tradingagents.risk import RiskCalculator, PositionSizer
-from tradingagents.agents.analysts.market_context_analyst import MarketContextAnalyst
-from tradingagents.dataflows.sec_edgar import SECEdgarClient
-from tradingagents.analysis import IntegratedAnalyzer, ConfidenceScorer
+from backend.backtesting import BacktestEngine, PerformanceMetrics
+from backend.risk import RiskCalculator, PositionSizer
+from backend.agents.analysts.market_context_analyst import MarketContextAnalyst
+from backend.dataflows.sec_edgar import SECEdgarClient
+from backend.analysis import IntegratedAnalyzer, ConfidenceScorer
 
 
 def example_backtesting():

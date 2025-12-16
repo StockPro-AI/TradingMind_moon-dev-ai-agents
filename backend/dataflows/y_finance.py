@@ -4,26 +4,73 @@ from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import os
 from functools import lru_cache
+from collections import OrderedDict
+import logging
 from .stockstats_utils import StockstatsUtils
 
-# Ticker object cache to avoid creating multiple instances for the same symbol
-_ticker_cache = {}
+# Configure logger for this module
+logger = logging.getLogger('backend.dataflows.y_finance')
+
+# Maximum number of tickers to cache (prevents unbounded memory growth)
+MAX_TICKER_CACHE_SIZE = 100
+
+
+class LRUTickerCache:
+    """LRU cache for yfinance Ticker objects with bounded size.
+
+    This prevents unbounded memory growth when analyzing many different tickers.
+    Uses OrderedDict for O(1) LRU operations.
+    """
+
+    def __init__(self, maxsize: int = MAX_TICKER_CACHE_SIZE):
+        self.cache = OrderedDict()
+        self.maxsize = maxsize
+
+    def get(self, symbol: str) -> yf.Ticker:
+        """Get or create a cached yfinance Ticker object for the given symbol."""
+        symbol_upper = symbol.upper()
+
+        if symbol_upper in self.cache:
+            # Move to end (most recently used)
+            self.cache.move_to_end(symbol_upper)
+            return self.cache[symbol_upper]
+
+        # Create new ticker
+        ticker = yf.Ticker(symbol_upper)
+
+        # Evict oldest if at capacity
+        if len(self.cache) >= self.maxsize:
+            evicted = self.cache.popitem(last=False)
+            logger.debug(f"Evicted ticker '{evicted[0]}' from cache (size limit: {self.maxsize})")
+
+        self.cache[symbol_upper] = ticker
+        return ticker
+
+    def clear(self):
+        """Clear the ticker cache."""
+        self.cache.clear()
+
+    def __len__(self):
+        return len(self.cache)
+
+
+# Global ticker cache instance
+_ticker_cache = LRUTickerCache()
+
 
 def _get_ticker(symbol: str) -> yf.Ticker:
     """Get or create a cached yfinance Ticker object for the given symbol.
 
     This avoids the N+1 pattern where multiple API calls create separate
-    Ticker instances for the same symbol.
+    Ticker instances for the same symbol. Uses LRU eviction to prevent
+    unbounded memory growth.
     """
-    symbol_upper = symbol.upper()
-    if symbol_upper not in _ticker_cache:
-        _ticker_cache[symbol_upper] = yf.Ticker(symbol_upper)
-    return _ticker_cache[symbol_upper]
+    return _ticker_cache.get(symbol)
+
 
 def clear_ticker_cache():
     """Clear the ticker cache. Useful for testing or freeing memory."""
-    global _ticker_cache
-    _ticker_cache = {}
+    _ticker_cache.clear()
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],

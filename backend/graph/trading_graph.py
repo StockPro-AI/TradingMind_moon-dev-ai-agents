@@ -1,10 +1,14 @@
 # TradingAgents/graph/trading_graph.py
 
 import os
+import logging
 from pathlib import Path
 import json
 from datetime import date
 from typing import Dict, Any, Tuple, List, Optional, TYPE_CHECKING
+
+# Configure logger for this module
+logger = logging.getLogger('backend.graph.trading_graph')
 
 # Lazy imports for LLM providers - only import what's needed to reduce startup time
 # These are imported when the provider is actually used
@@ -40,18 +44,18 @@ def _get_deepseek_llm(**kwargs):
     from langchain_deepseek import ChatDeepSeek
     return ChatDeepSeek(**kwargs)
 
-from tradingagents.agents import *
-from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.agents.utils.memory import FinancialSituationMemory
-from tradingagents.agents.utils.agent_states import (
+from backend.agents import *
+from backend.default_config import DEFAULT_CONFIG
+from backend.agents.utils.memory import FinancialSituationMemory
+from backend.agents.utils.agent_states import (
     AgentState,
     InvestDebateState,
     RiskDebateState,
 )
-from tradingagents.dataflows.config import set_config
+from backend.dataflows.config import set_config
 
 # Import the new abstract tool methods from agent_utils
-from tradingagents.agents.utils.agent_utils import (
+from backend.agents.utils.agent_utils import (
     get_stock_data,
     get_indicators,
     get_fundamentals,
@@ -114,15 +118,15 @@ class TradingAgentsGraph:
                 llm_kwargs["api_key"] = self.config["api_key"]
 
             # Debug logging
-            print(f"🔧 Initializing LLMs with provider: {provider}")
-            print(f"🔧 Using ChatDeepSeek for DeepSeek compatibility")
-            print(f"🔧 Deep think model: {llm_kwargs['model']}")
-            print(f"🔧 API key present: {bool(llm_kwargs.get('api_key'))}")
+            logger.debug(f"Initializing LLMs with provider: {provider}")
+            logger.debug(f"Using ChatDeepSeek for DeepSeek compatibility")
+            logger.debug(f"Deep think model: {llm_kwargs['model']}")
+            logger.debug(f"API key present: {bool(llm_kwargs.get('api_key'))}")
 
             self.deep_thinking_llm = _get_deepseek_llm(**llm_kwargs)
 
             llm_kwargs["model"] = self.config["quick_think_llm"]
-            print(f"🔧 Quick think model: {llm_kwargs['model']}")
+            logger.debug(f"Quick think model: {llm_kwargs['model']}")
             self.quick_thinking_llm = _get_deepseek_llm(**llm_kwargs)
 
         elif provider in ("openai", "ollama", "openrouter"):
@@ -135,14 +139,14 @@ class TradingAgentsGraph:
                 llm_kwargs["api_key"] = self.config["api_key"]
 
             # Debug logging
-            print(f"🔧 Initializing LLMs with provider: {provider}")
-            print(f"🔧 Deep think model: {llm_kwargs['model']}, base_url: {llm_kwargs['base_url']}")
-            print(f"🔧 API key present: {bool(llm_kwargs.get('api_key'))}")
+            logger.debug(f"Initializing LLMs with provider: {provider}")
+            logger.debug(f"Deep think model: {llm_kwargs['model']}, base_url: {llm_kwargs['base_url']}")
+            logger.debug(f"API key present: {bool(llm_kwargs.get('api_key'))}")
 
             self.deep_thinking_llm = _get_openai_llm(**llm_kwargs)
 
             llm_kwargs["model"] = self.config["quick_think_llm"]
-            print(f"🔧 Quick think model: {llm_kwargs['model']}")
+            logger.debug(f"Quick think model: {llm_kwargs['model']}")
             self.quick_thinking_llm = _get_openai_llm(**llm_kwargs)
 
         elif provider == "anthropic":
@@ -286,7 +290,7 @@ class TradingAgentsGraph:
                     self._log_state(trade_date, self.curr_state)
                 except (IOError, OSError, KeyError, TypeError) as log_error:
                     # Ignore expected logging errors (file issues, missing keys, type mismatches)
-                    print(f"Warning: Failed to log partial state: {type(log_error).__name__}")
+                    logger.warning(f"Failed to log partial state: {type(log_error).__name__}")
             raise
 
     def _log_state(self, trade_date, final_state):

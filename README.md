@@ -171,28 +171,28 @@ python examples/enhanced_analysis_example.py
 
 # Quick risk analysis for a stock
 python -c "
-from tradingagents.risk import RiskCalculator
+from backend.risk import RiskCalculator
 calc = RiskCalculator()
 print(calc.generate_risk_report('NVDA'))
 "
 
 # Market context analysis
 python -c "
-from tradingagents.agents.analysts.market_context_analyst import MarketContextAnalyst
+from backend.agents.analysts.market_context_analyst import MarketContextAnalyst
 analyst = MarketContextAnalyst()
 print(analyst.generate_report('AAPL'))
 "
 
 # SEC filings analysis
 python -c "
-from tradingagents.dataflows.sec_edgar import SECEdgarClient
+from backend.dataflows.sec_edgar import SECEdgarClient
 client = SECEdgarClient()
 print(client.generate_report('MSFT'))
 "
 
 # Backtest historical recommendations
 python -c "
-from tradingagents.backtesting import BacktestEngine
+from backend.backtesting import BacktestEngine
 engine = BacktestEngine(lookback_months=3)
 recs = [{'date': '2024-10-01', 'decision': 'BUY'}, {'date': '2024-11-01', 'decision': 'HOLD'}]
 result = engine.run_backtest('AAPL', recs)
@@ -203,8 +203,8 @@ print(engine.generate_report(result))
 ### Python API
 
 ```python
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+from backend.graph.trading_graph import TradingAgentsGraph
+from backend.default_config import DEFAULT_CONFIG
 
 # Basic usage
 ta = TradingAgentsGraph(debug=True, config=DEFAULT_CONFIG.copy())
@@ -235,7 +235,7 @@ _, decision = ta.propagate("NVDA", "2024-05-10")
 ### Full Integrated Analysis
 
 ```python
-from tradingagents.analysis import IntegratedAnalyzer
+from backend.analysis import IntegratedAnalyzer
 
 # Run comprehensive analysis with all modules
 analyzer = IntegratedAnalyzer(portfolio_value=100000)

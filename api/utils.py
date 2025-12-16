@@ -3,8 +3,62 @@ Utility functions for the TradingAgents API.
 Extracted to reduce code duplication and improve maintainability.
 """
 
+import os
 import re
+import logging
 from typing import Dict, List, Any, Optional
+
+# Configure module logger
+logger = logging.getLogger("tradingagents.api")
+
+
+def configure_provider(config: Dict[str, Any], provider: str) -> Dict[str, Any]:
+    """Configure LLM provider-specific settings.
+
+    Args:
+        config: Base configuration dictionary (will be modified)
+        provider: Provider name ('openai', 'deepseek', etc.)
+
+    Returns:
+        Modified config dict with provider-specific settings
+    """
+    if provider == "deepseek":
+        config["backend_url"] = "https://api.deepseek.com/v1"
+        config["deep_think_llm"] = "deepseek-chat"
+        config["quick_think_llm"] = "deepseek-chat"
+        config["api_key"] = os.getenv("DEEPSEEK_API_KEY")
+        config["llm_provider"] = "deepseek"
+        # Disable debate rounds for DeepSeek to avoid API compatibility issues
+        config["max_debate_rounds"] = 0
+        config["max_risk_discuss_rounds"] = 0
+        # Skip Research Manager and Trader for DeepSeek due to API compatibility issues
+        config["skip_research_manager"] = True
+        config["skip_trader"] = True
+    elif provider == "openai":
+        config["backend_url"] = "https://api.openai.com/v1"
+        config["deep_think_llm"] = "gpt-4o"
+        config["quick_think_llm"] = "gpt-4o-mini"
+        config["api_key"] = os.getenv("OPENAI_API_KEY")
+        config["llm_provider"] = "openai"
+
+    return config
+
+
+def get_selected_analysts(provider: str) -> List[str]:
+    """Get the list of analysts to use based on provider.
+
+    Args:
+        provider: Provider name
+
+    Returns:
+        List of analyst types to use
+    """
+    if provider == "deepseek":
+        # For DeepSeek, only use market and social analysts to avoid API compatibility issues
+        return ["market", "social"]
+    else:
+        # For other providers, use all analysts
+        return ["market", "social", "news", "fundamentals"]
 
 
 def extract_text(value) -> str:
