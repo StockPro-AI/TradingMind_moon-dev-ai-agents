@@ -65,23 +65,27 @@ def fetch_top_from_category(
 
     all_content = []
 
-    if max_limit < len(os.listdir(os.path.join(base_path, category))):
+    # Cache the directory listing to avoid redundant os.listdir() calls
+    category_path = os.path.join(base_path, category)
+    category_files = os.listdir(category_path)
+    num_files = len(category_files)
+
+    if max_limit < num_files:
         raise ValueError(
             "REDDIT FETCHING ERROR: max limit is less than the number of files in the category. Will not be able to fetch any posts"
         )
 
-    limit_per_subreddit = max_limit // len(
-        os.listdir(os.path.join(base_path, category))
-    )
+    limit_per_subreddit = max_limit // num_files
 
-    for data_file in os.listdir(os.path.join(base_path, category)):
+    # Reuse the cached file list instead of calling os.listdir() again
+    for data_file in category_files:
         # check if data_file is a .jsonl file
         if not data_file.endswith(".jsonl"):
             continue
 
         all_content_curr_subreddit = []
 
-        with open(os.path.join(base_path, category, data_file), "rb") as f:
+        with open(os.path.join(category_path, data_file), "rb") as f:
             for i, line in enumerate(f):
                 # skip empty lines
                 if not line.strip():

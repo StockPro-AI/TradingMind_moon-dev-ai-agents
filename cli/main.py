@@ -803,7 +803,8 @@ def run_analysis():
     # Now start the display layout
     layout = create_layout()
 
-    with Live(layout, refresh_per_second=4) as live:
+    # Reduced refresh rate from 4 to 2 Hz to lower CPU usage
+    with Live(layout, refresh_per_second=2) as live:
         # Initial display
         update_display(layout)
 

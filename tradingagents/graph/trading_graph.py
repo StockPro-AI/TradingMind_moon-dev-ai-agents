@@ -4,14 +4,41 @@ import os
 from pathlib import Path
 import json
 from datetime import date
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, List, Optional, TYPE_CHECKING
 
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_deepseek import ChatDeepSeek
+# Lazy imports for LLM providers - only import what's needed to reduce startup time
+# These are imported when the provider is actually used
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
+    from langchain_anthropic import ChatAnthropic
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_deepseek import ChatDeepSeek
 
 from langgraph.prebuilt import ToolNode
+
+
+def _get_openai_llm(**kwargs):
+    """Lazy import and create OpenAI LLM instance."""
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(**kwargs)
+
+
+def _get_anthropic_llm(**kwargs):
+    """Lazy import and create Anthropic LLM instance."""
+    from langchain_anthropic import ChatAnthropic
+    return ChatAnthropic(**kwargs)
+
+
+def _get_google_llm(**kwargs):
+    """Lazy import and create Google LLM instance."""
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    return ChatGoogleGenerativeAI(**kwargs)
+
+
+def _get_deepseek_llm(**kwargs):
+    """Lazy import and create DeepSeek LLM instance."""
+    from langchain_deepseek import ChatDeepSeek
+    return ChatDeepSeek(**kwargs)
 
 from tradingagents.agents import *
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -75,8 +102,10 @@ class TradingAgentsGraph:
             exist_ok=True,
         )
 
-        # Initialize LLMs
-        if self.config["llm_provider"].lower() == "deepseek":
+        # Initialize LLMs using lazy imports to reduce startup time
+        provider = self.config["llm_provider"].lower()
+
+        if provider == "deepseek":
             # Use ChatDeepSeek for DeepSeek provider to avoid parameter incompatibility
             llm_kwargs = {
                 "model": self.config["deep_think_llm"],
@@ -85,17 +114,18 @@ class TradingAgentsGraph:
                 llm_kwargs["api_key"] = self.config["api_key"]
 
             # Debug logging
-            print(f"🔧 Initializing LLMs with provider: {self.config['llm_provider']}")
+            print(f"🔧 Initializing LLMs with provider: {provider}")
             print(f"🔧 Using ChatDeepSeek for DeepSeek compatibility")
             print(f"🔧 Deep think model: {llm_kwargs['model']}")
             print(f"🔧 API key present: {bool(llm_kwargs.get('api_key'))}")
 
-            self.deep_thinking_llm = ChatDeepSeek(**llm_kwargs)
+            self.deep_thinking_llm = _get_deepseek_llm(**llm_kwargs)
 
             llm_kwargs["model"] = self.config["quick_think_llm"]
             print(f"🔧 Quick think model: {llm_kwargs['model']}")
-            self.quick_thinking_llm = ChatDeepSeek(**llm_kwargs)
-        elif self.config["llm_provider"].lower() == "openai" or self.config["llm_provider"] == "ollama" or self.config["llm_provider"] == "openrouter":
+            self.quick_thinking_llm = _get_deepseek_llm(**llm_kwargs)
+
+        elif provider in ("openai", "ollama", "openrouter"):
             # Use api_key from config if provided, otherwise LangChain will use environment variable
             llm_kwargs = {
                 "model": self.config["deep_think_llm"],
@@ -105,23 +135,26 @@ class TradingAgentsGraph:
                 llm_kwargs["api_key"] = self.config["api_key"]
 
             # Debug logging
-            print(f"🔧 Initializing LLMs with provider: {self.config['llm_provider']}")
+            print(f"🔧 Initializing LLMs with provider: {provider}")
             print(f"🔧 Deep think model: {llm_kwargs['model']}, base_url: {llm_kwargs['base_url']}")
             print(f"🔧 API key present: {bool(llm_kwargs.get('api_key'))}")
 
-            self.deep_thinking_llm = ChatOpenAI(**llm_kwargs)
+            self.deep_thinking_llm = _get_openai_llm(**llm_kwargs)
 
             llm_kwargs["model"] = self.config["quick_think_llm"]
             print(f"🔧 Quick think model: {llm_kwargs['model']}")
-            self.quick_thinking_llm = ChatOpenAI(**llm_kwargs)
-        elif self.config["llm_provider"].lower() == "anthropic":
-            self.deep_thinking_llm = ChatAnthropic(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
-            self.quick_thinking_llm = ChatAnthropic(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
-        elif self.config["llm_provider"].lower() == "google":
-            self.deep_thinking_llm = ChatGoogleGenerativeAI(model=self.config["deep_think_llm"])
-            self.quick_thinking_llm = ChatGoogleGenerativeAI(model=self.config["quick_think_llm"])
+            self.quick_thinking_llm = _get_openai_llm(**llm_kwargs)
+
+        elif provider == "anthropic":
+            self.deep_thinking_llm = _get_anthropic_llm(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
+            self.quick_thinking_llm = _get_anthropic_llm(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
+
+        elif provider == "google":
+            self.deep_thinking_llm = _get_google_llm(model=self.config["deep_think_llm"])
+            self.quick_thinking_llm = _get_google_llm(model=self.config["quick_think_llm"])
+
         else:
-            raise ValueError(f"Unsupported LLM provider: {self.config['llm_provider']}")
+            raise ValueError(f"Unsupported LLM provider: {provider}")
         
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
@@ -251,8 +284,9 @@ class TradingAgentsGraph:
                 # Try to log partial state
                 try:
                     self._log_state(trade_date, self.curr_state)
-                except:
-                    pass  # Ignore logging errors
+                except (IOError, OSError, KeyError, TypeError) as log_error:
+                    # Ignore expected logging errors (file issues, missing keys, type mismatches)
+                    print(f"Warning: Failed to log partial state: {type(log_error).__name__}")
             raise
 
     def _log_state(self, trade_date, final_state):

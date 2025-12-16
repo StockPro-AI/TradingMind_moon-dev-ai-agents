@@ -3,7 +3,27 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import os
+from functools import lru_cache
 from .stockstats_utils import StockstatsUtils
+
+# Ticker object cache to avoid creating multiple instances for the same symbol
+_ticker_cache = {}
+
+def _get_ticker(symbol: str) -> yf.Ticker:
+    """Get or create a cached yfinance Ticker object for the given symbol.
+
+    This avoids the N+1 pattern where multiple API calls create separate
+    Ticker instances for the same symbol.
+    """
+    symbol_upper = symbol.upper()
+    if symbol_upper not in _ticker_cache:
+        _ticker_cache[symbol_upper] = yf.Ticker(symbol_upper)
+    return _ticker_cache[symbol_upper]
+
+def clear_ticker_cache():
+    """Clear the ticker cache. Useful for testing or freeing memory."""
+    global _ticker_cache
+    _ticker_cache = {}
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -14,8 +34,8 @@ def get_YFin_data_online(
     datetime.strptime(start_date, "%Y-%m-%d")
     datetime.strptime(end_date, "%Y-%m-%d")
 
-    # Create ticker object
-    ticker = yf.Ticker(symbol.upper())
+    # Use cached ticker object to avoid N+1 pattern
+    ticker = _get_ticker(symbol)
 
     # Fetch historical data for the specified date range
     data = ticker.history(start=start_date, end=end_date)
@@ -215,12 +235,32 @@ def _get_stock_stats_bulk(
         except FileNotFoundError:
             raise Exception("Stockstats fail: Yahoo Finance data not fetched yet!")
     else:
-        # Online data fetching with caching
-        today_date = pd.Timestamp.today()
+        # Online data fetching with smart lookback window
+        # Instead of fetching 15 years, calculate minimum needed for the indicator
+        # Most indicators need at most 200 days of historical data (200 SMA)
+        # Add buffer for weekends/holidays (roughly 1.5x trading days)
+        indicator_lookback = {
+            "close_200_sma": 300,  # 200 days + buffer
+            "close_50_sma": 80,
+            "close_10_ema": 20,
+            "macd": 40,  # MACD uses 26-day EMA
+            "macds": 50,
+            "macdh": 50,
+            "rsi": 20,  # RSI uses 14-day default
+            "boll": 30,  # Bollinger uses 20-day
+            "boll_ub": 30,
+            "boll_lb": 30,
+            "atr": 20,  # ATR uses 14-day
+            "vwma": 30,
+            "mfi": 20,
+        }
+        # Default to 300 days for unknown indicators (covers 200 SMA)
+        lookback_days = indicator_lookback.get(indicator, 300)
+
         curr_date_dt = pd.to_datetime(curr_date)
-        
-        end_date = today_date
-        start_date = today_date - pd.DateOffset(years=15)
+        # Use curr_date as end date to avoid fetching future data
+        end_date = min(pd.Timestamp.today(), curr_date_dt + pd.DateOffset(days=5))
+        start_date = curr_date_dt - pd.DateOffset(days=lookback_days)
         start_date_str = start_date.strftime("%Y-%m-%d")
         end_date_str = end_date.strftime("%Y-%m-%d")
         
@@ -300,7 +340,7 @@ def get_balance_sheet(
 ):
     """Get balance sheet data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = _get_ticker(ticker)
         
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_balance_sheet
@@ -330,7 +370,7 @@ def get_cashflow(
 ):
     """Get cash flow data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = _get_ticker(ticker)
         
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_cashflow
@@ -360,7 +400,7 @@ def get_income_statement(
 ):
     """Get income statement data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = _get_ticker(ticker)
         
         if freq.lower() == "quarterly":
             data = ticker_obj.quarterly_income_stmt
@@ -388,7 +428,7 @@ def get_insider_transactions(
 ):
     """Get insider transactions data from yfinance."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
+        ticker_obj = _get_ticker(ticker)
         data = ticker_obj.insider_transactions
         
         if data is None or data.empty:

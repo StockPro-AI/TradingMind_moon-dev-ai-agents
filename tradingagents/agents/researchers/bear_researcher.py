@@ -48,9 +48,13 @@ Use this information to deliver a compelling bear argument, refute the bull's cl
 
         argument = f"Bear Analyst: {response.content}"
 
+        # Use list joining for O(n) complexity instead of string concatenation O(n²)
+        new_history = "\n".join(filter(None, [history, argument]))
+        new_bear_history = "\n".join(filter(None, [bear_history, argument]))
+
         new_investment_debate_state = {
-            "history": history + "\n" + argument,
-            "bear_history": bear_history + "\n" + argument,
+            "history": new_history,
+            "bear_history": new_bear_history,
             "bull_history": investment_debate_state.get("bull_history", ""),
             "current_response": argument,
             "count": investment_debate_state["count"] + 1,

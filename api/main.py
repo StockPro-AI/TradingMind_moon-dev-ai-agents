@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
+from api.utils import extract_text, categorize_by_headers, process_analysis_reports
 
 app = FastAPI(
     title="TradingAgents API",
@@ -183,8 +184,9 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
-            except:
-                pass
+            except (WebSocketDisconnect, RuntimeError, ConnectionError) as e:
+                # Connection closed or lost - this is expected during disconnects
+                debug_log(f"Broadcast to connection failed (expected during disconnect): {type(e).__name__}")
 
 
 manager = ConnectionManager()
