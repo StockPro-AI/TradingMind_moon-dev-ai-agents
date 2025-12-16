@@ -142,6 +142,27 @@ python -m cli.main
 # - LLM provider preference
 ```
 
+### Web UI (Frontend + Backend)
+
+Start both servers to use the web interface:
+
+```bash
+# Terminal 1: Start the FastAPI backend server
+python api/main.py
+# Or with uvicorn directly:
+# uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+
+# Terminal 2: Start the React frontend
+cd frontend
+npm install    # First time only
+npm run dev
+```
+
+**Access:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8001
+- API Docs (Swagger): http://localhost:8001/docs
+
 ### Run Analysis Examples
 
 ```bash
