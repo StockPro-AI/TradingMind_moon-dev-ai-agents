@@ -1,38 +1,84 @@
 # TradingAgents: Multi-Agents LLM Financial Trading Framework
 
-[![arXiv](https://img.shields.io/badge/arXiv-2412.20138-B31B1B?logo=arxiv)](https://arxiv.org/abs/2412.20138)
-[![Discord](https://img.shields.io/badge/Discord-TradingResearch-7289da?logo=discord&logoColor=white&color=7289da)](https://discord.com/invite/hk9PGKShPK)
-[![X Follow](https://img.shields.io/badge/X-TauricResearch-white?logo=x&logoColor=white)](https://x.com/TauricResearch)
 
 TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents—from fundamental analysts, sentiment experts, and technical analysts, to traders and risk management teams—the platform collaboratively evaluates market conditions and informs trading decisions.
 
-> **Disclaimer:** TradingAgents framework is designed for research purposes. Trading performance may vary based on many factors. [It is not intended as financial, investment, or trading advice.](https://tauric.ai/disclaimer/)
+> **Disclaimer:** TradingAgents framework is designed for research purposes. Trading performance may vary based on many factors. It is not intended as financial, investment, or trading advice.
 
 ## Architecture
 
-The framework decomposes complex trading tasks into specialized roles:
+```
+                              +------------------+
+                              |   User Input     |
+                              |  (Ticker, Date)  |
+                              +--------+---------+
+                                       |
+                                       v
+            +----------------------------------------------------------+
+            |                    ANALYST TEAM                          |
+            |  +-------------+  +-------------+  +------------------+  |
+            |  | Fundamentals|  |  Sentiment  |  |    Technical     |  |
+            |  |   Analyst   |  |   Analyst   |  |     Analyst      |  |
+            |  +------+------+  +------+------+  +--------+---------+  |
+            |         |                |                  |            |
+            |  +------+------+         |                  |            |
+            |  |    News     |         |                  |            |
+            |  |   Analyst   |         |                  |            |
+            |  +------+------+         |                  |            |
+            +---------|----------------|------------------|------------+
+                      |                |                  |
+                      v                v                  v
+            +----------------------------------------------------------+
+            |                   RESEARCHER TEAM                        |
+            |        +----------------+    +----------------+          |
+            |        | Bull Researcher|<-->| Bear Researcher|          |
+            |        | (Pro Growth)   |    | (Risk Focused) |          |
+            |        +-------+--------+    +--------+-------+          |
+            |                |     DEBATE      |                       |
+            |                +--------+--------+                       |
+            +-------------------------|--------------------------------+
+                                      |
+                                      v
+            +----------------------------------------------------------+
+            |                    TRADER AGENT                          |
+            |     Synthesizes all reports, makes trading decision      |
+            |              (BUY / SELL / HOLD + sizing)                |
+            +-------------------------|--------------------------------+
+                                      |
+                                      v
+            +----------------------------------------------------------+
+            |                 RISK MANAGEMENT TEAM                     |
+            |  +----------------+  +----------------+  +------------+  |
+            |  | Aggressive Risk|  | Conservative  |  |  Neutral   |  |
+            |  |    Analyst     |  | Risk Analyst  |  |  Analyst   |  |
+            |  +-------+--------+  +-------+-------+  +-----+------+  |
+            |          |     RISK DEBATE       |            |         |
+            |          +-----------+-----------+------------+         |
+            +----------------------|-----------------------------------+
+                                   |
+                                   v
+            +----------------------------------------------------------+
+            |                 PORTFOLIO MANAGER                        |
+            |         Final approval/rejection of trade proposal       |
+            |              Returns: Decision + Reasoning               |
+            +----------------------------------------------------------+
+```
 
-### Analyst Team
-- **Fundamentals Analyst**: Evaluates company financials and performance metrics
-- **Sentiment Analyst**: Analyzes social media and public sentiment
-- **News Analyst**: Monitors global news and macroeconomic indicators
-- **Technical Analyst**: Utilizes technical indicators (MACD, RSI, etc.)
+### Agent Roles
 
-### Researcher Team
-- **Bull Researcher**: Advocates for bullish positions with supporting evidence
-- **Bear Researcher**: Advocates for bearish positions and identifies risks
-- Researchers engage in structured debates to balance gains against risks
-
-### Trader Agent
-- Composes reports from analysts and researchers
-- Makes informed trading decisions on timing and magnitude
-
-### Risk Management & Portfolio Manager
-- **Risk Team**: Evaluates portfolio risk, volatility, and liquidity
-- **Portfolio Manager**: Approves/rejects transaction proposals
+| Team | Agent | Responsibility |
+|------|-------|----------------|
+| **Analysts** | Fundamentals | Evaluates company financials, earnings, balance sheets |
+| | Sentiment | Analyzes social media and public sentiment |
+| | News | Monitors global news and macroeconomic indicators |
+| | Technical | Utilizes technical indicators (MACD, RSI, Bollinger) |
+| **Researchers** | Bull | Advocates for bullish positions with evidence |
+| | Bear | Identifies risks and bearish factors |
+| **Trading** | Trader | Synthesizes reports, proposes trades |
+| **Risk** | Risk Team | Evaluates portfolio risk, volatility, liquidity |
+| | Portfolio Mgr | Final trade approval/rejection |
 
 ## Installation
-
 ```bash
 git clone https://github.com/TauricResearch/TradingAgents.git
 cd TradingAgents
@@ -45,26 +91,92 @@ conda activate tradingagents
 pip install -r requirements.txt
 ```
 
-### Required APIs
+## Environment Setup
 
-```bash
-export OPENAI_API_KEY=$YOUR_OPENAI_API_KEY
-export ALPHA_VANTAGE_API_KEY=$YOUR_ALPHA_VANTAGE_API_KEY
-```
 
-Or create a `.env` file (see `.env.example`):
+Create a `.env` file in the project root:
+
 ```bash
 cp .env.example .env
 ```
 
-**Note:** Free Alpha Vantage API available at [alphavantage.co](https://www.alphavantage.co/support/#api-key). TradingAgents requests have increased rate limits (60/min, no daily limit).
+Then configure your API keys:
+
+```env
+# Required: At least one LLM provider
+OPENAI_API_KEY=sk-your-openai-key          # For GPT models
+ANTHROPIC_API_KEY=sk-ant-your-key          # For Claude models
+DEEPSEEK_API_KEY=your-deepseek-key         # For DeepSeek models (budget option)
+
+# Required: Market data
+ALPHA_VANTAGE_API_KEY=your-av-key          # Free at alphavantage.co
+
+# Optional: Memory/learning features (requires OpenAI for embeddings)
+USE_MEMORY=true                             # Set false to disable
+
+# Optional: Redis caching
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Optional: Debug mode
+DEBUG_LOGGING=false
+```
+
+**Getting API Keys:**
+- **OpenAI**: https://platform.openai.com/api-keys
+- **Anthropic**: https://console.anthropic.com/
+- **DeepSeek**: https://platform.deepseek.com/
+- **Alpha Vantage**: https://www.alphavantage.co/support/#api-key (FREE)
 
 ## Usage
 
-### CLI
+### CLI (Interactive Mode)
 
 ```bash
+# Start interactive trading agent
 python -m cli.main
+
+# The CLI will prompt for:
+# - Stock ticker (e.g., NVDA, AAPL)
+# - Analysis date
+# - LLM provider preference
+```
+
+### Run Analysis Examples
+
+```bash
+# Run all enhanced analysis examples (backtesting, risk, SEC filings)
+python examples/enhanced_analysis_example.py
+
+# Quick risk analysis for a stock
+python -c "
+from tradingagents.risk import RiskCalculator
+calc = RiskCalculator()
+print(calc.generate_risk_report('NVDA'))
+"
+
+# Market context analysis
+python -c "
+from tradingagents.agents.analysts.market_context_analyst import MarketContextAnalyst
+analyst = MarketContextAnalyst()
+print(analyst.generate_report('AAPL'))
+"
+
+# SEC filings analysis
+python -c "
+from tradingagents.dataflows.sec_edgar import SECEdgarClient
+client = SECEdgarClient()
+print(client.generate_report('MSFT'))
+"
+
+# Backtest historical recommendations
+python -c "
+from tradingagents.backtesting import BacktestEngine
+engine = BacktestEngine(lookback_months=3)
+recs = [{'date': '2024-10-01', 'decision': 'BUY'}, {'date': '2024-11-01', 'decision': 'HOLD'}]
+result = engine.run_backtest('AAPL', recs)
+print(engine.generate_report(result))
+"
 ```
 
 ### Python API
@@ -73,18 +185,19 @@ python -m cli.main
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
+# Basic usage
 ta = TradingAgentsGraph(debug=True, config=DEFAULT_CONFIG.copy())
 _, decision = ta.propagate("NVDA", "2024-05-10")
 print(decision)
-```
 
-### Custom Configuration
 
-```python
+# Custom configuration
 config = DEFAULT_CONFIG.copy()
-config["deep_think_llm"] = "gpt-4o"
-config["quick_think_llm"] = "gpt-4o-mini"
+config["deep_think_llm"] = "gpt-4o"           # For complex analysis
+config["quick_think_llm"] = "gpt-4o-mini"     # For quick tasks
 config["max_debate_rounds"] = 2
+
+# Use free data sources only
 
 config["data_vendors"] = {
     "core_stock_apis": "yfinance",
@@ -97,7 +210,32 @@ ta = TradingAgentsGraph(debug=True, config=config)
 _, decision = ta.propagate("NVDA", "2024-05-10")
 ```
 
-## New Analysis Modules
+
+### Full Integrated Analysis
+
+```python
+from tradingagents.analysis import IntegratedAnalyzer
+
+# Run comprehensive analysis with all modules
+analyzer = IntegratedAnalyzer(portfolio_value=100000)
+
+# Mock state (normally comes from TradingAgentsGraph)
+state = {
+    "market_report": "Technical indicators bullish",
+    "sentiment_report": "Positive social sentiment",
+    "news_report": "Strong earnings reported",
+    "fundamentals_report": "Healthy balance sheet",
+    "investment_debate_state": {"bull_history": "Growth potential", "bear_history": "Valuation concerns"},
+    "risk_debate_state": {"risky_history": "High reward", "safe_history": "Use stop loss"},
+    "final_trade_decision": "BUY"
+}
+
+result = analyzer.analyze("NVDA", state, "BUY", include_sec=True)
+print(result.generate_report())  # Markdown report
+print(result.to_json())          # JSON output
+```
+
+## Analysis Modules
 
 Enhanced analysis capabilities using **FREE data sources only**:
 
@@ -109,43 +247,3 @@ Enhanced analysis capabilities using **FREE data sources only**:
 | **Market Context** | Regime detection, sector ranking, peer comparison | yfinance |
 | **SEC Filings** | 10-K, 10-Q, 8-K analysis | SEC EDGAR |
 | **Confidence Scorer** | Multi-factor confidence calculation | Local |
-
-### Example: Enhanced Analysis
-
-```python
-from tradingagents.analysis import IntegratedAnalyzer
-from tradingagents.backtesting import BacktestEngine
-from tradingagents.risk import RiskCalculator, PositionSizer
-
-# Risk analysis
-calculator = RiskCalculator()
-metrics = calculator.calculate_risk_metrics("NVDA")
-
-# Position sizing
-sizer = PositionSizer(portfolio_value=100000)
-positions = sizer.calculate_optimal_position(price, stop_loss_pct=0.05)
-
-# Backtesting
-engine = BacktestEngine(lookback_months=3)
-result = engine.run_backtest("AAPL", recommendations)
-```
-
-See `examples/enhanced_analysis_example.py` for full usage.
-
-## Contributing
-
-We welcome contributions! Whether it's fixing bugs, improving documentation, or suggesting features. Join our community at [Tauric Research](https://tauric.ai/).
-
-## Citation
-
-```bibtex
-@misc{xiao2025tradingagentsmultiagentsllmfinancial,
-      title={TradingAgents: Multi-Agents LLM Financial Trading Framework},
-      author={Yijia Xiao and Edward Sun and Di Luo and Wei Wang},
-      year={2025},
-      eprint={2412.20138},
-      archivePrefix={arXiv},
-      primaryClass={q-fin.TR},
-      url={https://arxiv.org/abs/2412.20138},
-}
-```
