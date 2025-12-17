@@ -1,8 +1,22 @@
 from typing import Annotated
 import logging
+import time
 
 # Configure logger for this module
 logger = logging.getLogger('backend.dataflows.interface')
+
+# Import rate limiting and retry utilities
+try:
+    from backend.utils import (
+        get_rate_limiter,
+        retry_with_backoff,
+        ALPHA_VANTAGE_LIMITER,
+        FINNHUB_LIMITER,
+    )
+    _rate_limiting_available = True
+except ImportError:
+    _rate_limiting_available = False
+    logger.debug("Rate limiting utilities not available")
 
 # Import from vendor-specific modules
 from .local import get_YFin_data, get_finnhub_news, get_finnhub_company_insider_sentiment, get_finnhub_company_insider_transactions, get_simfin_balance_sheet, get_simfin_cashflow, get_simfin_income_statements, get_reddit_global_news, get_reddit_company_news
@@ -142,6 +156,23 @@ def get_vendor(category: str, method: str = None) -> str:
     # Fall back to category-level configuration
     return config.get("data_vendors", {}).get(category, "default")
 
+def _apply_rate_limit(vendor: str) -> None:
+    """Apply rate limiting for a specific vendor if available."""
+    if not _rate_limiting_available:
+        return
+
+    # Map vendors to their rate limiters
+    vendor_limiters = {
+        "alpha_vantage": (ALPHA_VANTAGE_LIMITER, 5),  # 5 calls/min
+        "finnhub": (FINNHUB_LIMITER, 60),  # 60 calls/min
+    }
+
+    if vendor in vendor_limiters:
+        limiter_name, calls_per_min = vendor_limiters[vendor]
+        limiter = get_rate_limiter(limiter_name, calls_per_minute=calls_per_min)
+        limiter.acquire()
+
+
 def route_to_vendor(method: str, *args, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support."""
     category = get_category_for_method(method)
@@ -155,7 +186,7 @@ def route_to_vendor(method: str, *args, **kwargs):
 
     # Get all available vendors for this method for fallback
     all_available_vendors = list(VENDOR_METHODS[method].keys())
-    
+
     # Create fallback vendor list: primary vendors first, then remaining vendors as fallbacks
     fallback_vendors = primary_vendors.copy()
     for vendor in all_available_vendors:
@@ -202,6 +233,9 @@ def route_to_vendor(method: str, *args, **kwargs):
         vendor_results = []
         for impl_func, vendor_name in vendor_methods:
             try:
+                # Apply rate limiting before making the call
+                _apply_rate_limit(vendor_name)
+
                 logger.debug(f"Calling {impl_func.__name__} from vendor '{vendor_name}'...")
                 result = impl_func(*args, **kwargs)
                 vendor_results.append(result)

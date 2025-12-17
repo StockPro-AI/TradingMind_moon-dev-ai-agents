@@ -9,8 +9,8 @@ from datetime import datetime
 
 from .confidence_scorer import ConfidenceScorer
 from .enhanced_output import EnhancedDecision, EnhancedOutputBuilder, PriceTarget, RiskParameters
-from ..risk.risk_calculator import RiskCalculator
-from ..risk.position_sizer import PositionSizer
+from .risk_calculator import RiskCalculator
+from .position_sizer import PositionSizer
 from ..agents.analysts.market_context_analyst import MarketContextAnalyst
 from ..dataflows.sec_edgar import SECEdgarClient
 

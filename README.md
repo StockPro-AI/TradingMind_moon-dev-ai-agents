@@ -88,10 +88,6 @@ TradingAgents is a multi-agent trading framework that mirrors the dynamics of re
 # Install uv (if not installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone and setup
-git clone https://github.com/TauricResearch/TradingAgents.git
-cd TradingAgents
-
 # Install all dependencies (creates .venv automatically)
 uv sync
 
@@ -100,22 +96,7 @@ uv run python -m cli.main
 uv run python api/main.py
 ```
 
-### Alternative: Using pip
-
-```bash
-git clone https://github.com/TauricResearch/TradingAgents.git
-cd TradingAgents
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -e .
-```
-
 ## Environment Setup
-
 
 Create a `.env` file in the project root:
 
@@ -198,7 +179,7 @@ uv run python examples/enhanced_analysis_example.py
 
 # Quick risk analysis for a stock
 uv run python -c "
-from backend.risk import RiskCalculator
+from backend.analysis import RiskCalculator
 calc = RiskCalculator()
 print(calc.generate_risk_report('NVDA'))
 "
@@ -226,72 +207,3 @@ result = engine.run_backtest('AAPL', recs)
 print(engine.generate_report(result))
 "
 ```
-
-### Python API
-
-```python
-from backend.graph.trading_graph import TradingAgentsGraph
-from backend.default_config import DEFAULT_CONFIG
-
-# Basic usage
-ta = TradingAgentsGraph(debug=True, config=DEFAULT_CONFIG.copy())
-_, decision = ta.propagate("NVDA", "2024-05-10")
-print(decision)
-
-
-# Custom configuration
-config = DEFAULT_CONFIG.copy()
-config["deep_think_llm"] = "gpt-4o"           # For complex analysis
-config["quick_think_llm"] = "gpt-4o-mini"     # For quick tasks
-config["max_debate_rounds"] = 2
-
-# Use free data sources only
-
-config["data_vendors"] = {
-    "core_stock_apis": "yfinance",
-    "technical_indicators": "yfinance",
-    "fundamental_data": "alpha_vantage",
-    "news_data": "alpha_vantage",
-}
-
-ta = TradingAgentsGraph(debug=True, config=config)
-_, decision = ta.propagate("NVDA", "2024-05-10")
-```
-
-
-### Full Integrated Analysis
-
-```python
-from backend.analysis import IntegratedAnalyzer
-
-# Run comprehensive analysis with all modules
-analyzer = IntegratedAnalyzer(portfolio_value=100000)
-
-# Mock state (normally comes from TradingAgentsGraph)
-state = {
-    "market_report": "Technical indicators bullish",
-    "sentiment_report": "Positive social sentiment",
-    "news_report": "Strong earnings reported",
-    "fundamentals_report": "Healthy balance sheet",
-    "investment_debate_state": {"bull_history": "Growth potential", "bear_history": "Valuation concerns"},
-    "risk_debate_state": {"risky_history": "High reward", "safe_history": "Use stop loss"},
-    "final_trade_decision": "BUY"
-}
-
-result = analyzer.analyze("NVDA", state, "BUY", include_sec=True)
-print(result.generate_report())  # Markdown report
-print(result.to_json())          # JSON output
-```
-
-## Analysis Modules
-
-Enhanced analysis capabilities using **FREE data sources only**:
-
-| Module | Description | Data Source |
-|--------|-------------|-------------|
-| **Backtesting** | Historical validation with Sharpe, Sortino, max drawdown | yfinance |
-| **Risk Calculator** | VaR, CVaR, beta, volatility analysis | yfinance |
-| **Position Sizer** | Kelly criterion, fixed fractional, volatility-based | Local |
-| **Market Context** | Regime detection, sector ranking, peer comparison | yfinance |
-| **SEC Filings** | 10-K, 10-Q, 8-K analysis | SEC EDGAR |
-| **Confidence Scorer** | Multi-factor confidence calculation | Local |

@@ -20,6 +20,13 @@ DEFAULT_CONFIG = {
     "backend_url": "https://api.openai.com/v1",
     # Memory settings
     "use_memory": os.getenv("USE_MEMORY", "true").lower() in ("true", "1", "yes"),  # Set to False to disable memory/learning
+    "max_memories": 1000,  # Maximum number of memories per agent
+    "memory_ttl_days": 90,  # Days before memories expire
+    "min_relevance_score": 0.5,  # Minimum similarity score for memory retrieval
+    # Caching settings
+    "enable_llm_cache": os.getenv("ENABLE_LLM_CACHE", "true").lower() in ("true", "1", "yes"),
+    "llm_cache_ttl": 3600,  # LLM response cache TTL in seconds
+    "data_cache_ttl": 1800,  # Data cache TTL in seconds (30 minutes)
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
