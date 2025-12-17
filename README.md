@@ -79,16 +79,39 @@ TradingAgents is a multi-agent trading framework that mirrors the dynamics of re
 | | Portfolio Mgr | Final trade approval/rejection |
 
 ## Installation
+
+### Using uv (Recommended)
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package manager that handles virtual environments automatically.
+
+```bash
+# Install uv (if not installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and setup
+git clone https://github.com/TauricResearch/TradingAgents.git
+cd TradingAgents
+
+# Install all dependencies (creates .venv automatically)
+uv sync
+
+# Run commands with uv
+uv run python -m cli.main
+uv run python api/main.py
+```
+
+### Alternative: Using pip
+
 ```bash
 git clone https://github.com/TauricResearch/TradingAgents.git
 cd TradingAgents
 
 # Create virtual environment
-conda create -n tradingagents python=3.13
-conda activate tradingagents
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Environment Setup
@@ -134,6 +157,10 @@ DEBUG_LOGGING=false
 
 ```bash
 # Start interactive trading agent
+uv run python -m cli.main
+
+# Or with activated venv
+source .venv/bin/activate
 python -m cli.main
 
 # The CLI will prompt for:
@@ -148,14 +175,14 @@ Start both servers to use the web interface:
 
 ```bash
 # Terminal 1: Start the FastAPI backend server
-python api/main.py
-# Or with uvicorn directly:
-# uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+./start-backend.sh
+# Or manually:
+uv run python api/main.py
 
 # Terminal 2: Start the React frontend
-cd frontend
-npm install    # First time only
-npm run dev
+./start-frontend.sh
+# Or manually:
+cd frontend && npm install && npm run dev
 ```
 
 **Access:**
@@ -167,31 +194,31 @@ npm run dev
 
 ```bash
 # Run all enhanced analysis examples (backtesting, risk, SEC filings)
-python examples/enhanced_analysis_example.py
+uv run python examples/enhanced_analysis_example.py
 
 # Quick risk analysis for a stock
-python -c "
+uv run python -c "
 from backend.risk import RiskCalculator
 calc = RiskCalculator()
 print(calc.generate_risk_report('NVDA'))
 "
 
 # Market context analysis
-python -c "
+uv run python -c "
 from backend.agents.analysts.market_context_analyst import MarketContextAnalyst
 analyst = MarketContextAnalyst()
 print(analyst.generate_report('AAPL'))
 "
 
 # SEC filings analysis
-python -c "
+uv run python -c "
 from backend.dataflows.sec_edgar import SECEdgarClient
 client = SECEdgarClient()
 print(client.generate_report('MSFT'))
 "
 
 # Backtest historical recommendations
-python -c "
+uv run python -c "
 from backend.backtesting import BacktestEngine
 engine = BacktestEngine(lookback_months=3)
 recs = [{'date': '2024-10-01', 'decision': 'BUY'}, {'date': '2024-11-01', 'decision': 'HOLD'}]

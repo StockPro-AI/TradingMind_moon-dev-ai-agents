@@ -2,6 +2,8 @@
 
 # TradingAgents Frontend Startup Script
 
+set -e
+
 echo "🎨 Starting TradingAgents Frontend..."
 
 cd frontend
@@ -12,7 +14,8 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 
-echo "✅ Starting development server on http://localhost:3000"
+echo ""
+echo "✅ Starting development server on http://localhost:5173"
 echo ""
 echo "Press Ctrl+C to stop the server"
 echo ""
