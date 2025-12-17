@@ -28,7 +28,6 @@ Thumbs.db
 results/
 eval_results/
 eval_data/
-src/
 
 # Frontend
 frontend/node_modules/
