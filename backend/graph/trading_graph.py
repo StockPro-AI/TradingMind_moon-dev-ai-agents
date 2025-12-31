@@ -1,4 +1,4 @@
-# TradingAgents/graph/trading_graph.py
+# TradingMind/graph/trading_graph.py
 
 import os
 import logging
@@ -75,8 +75,8 @@ from .reflection import Reflector
 from .signal_processing import SignalProcessor
 
 
-class TradingAgentsGraph:
-    """Main class that orchestrates the trading agents framework."""
+class TradingMindGraph:
+    """Main class that orchestrates the TradingMind framework."""
 
     def __init__(
         self,
@@ -356,3 +356,7 @@ class TradingAgentsGraph:
     def process_signal(self, full_signal):
         """Process a signal to extract the core decision."""
         return self.signal_processor.process_signal(full_signal)
+
+
+# Alias for backwards compatibility
+TradingAgentsGraph = TradingMindGraph

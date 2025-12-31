@@ -64,7 +64,7 @@ function App() {
               <Activity className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">TradingAgents</h1>
+              <h1 className="text-xl font-bold text-white">TradingMind</h1>
               <p className="text-xs text-gray-400">Multi-Agent AI Trading Analysis</p>
             </div>
           </div>
@@ -136,7 +136,7 @@ function App() {
       <footer className="border-t border-gray-800 mt-auto">
         <div className="max-w-7xl mx-auto px-4 py-6 text-center text-gray-500 text-sm">
           <p>
-            <strong className="text-gray-400">Disclaimer:</strong> TradingAgents is for research purposes only.
+            <strong className="text-gray-400">Disclaimer:</strong> TradingMind is for research purposes only.
             Not financial advice.
           </p>
         </div>

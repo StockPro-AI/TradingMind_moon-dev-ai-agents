@@ -1,4 +1,4 @@
-Run a stock analysis using the TradingAgents framework.
+Run a stock analysis using the TradingMind framework.
 
 ## Instructions
 
@@ -11,12 +11,12 @@ Analyze the stock ticker: $ARGUMENTS
 2. Run the analysis using the CLI:
 ```bash
 cd /Users/chong/moon-dev-ai-agents && uv run python -c "
-from backend.graph.trading_graph import TradingAgentsGraph
+from backend.graph.trading_graph import TradingMindGraph
 from backend.default_config import DEFAULT_CONFIG
 from datetime import date
 
 ticker = '$ARGUMENTS' if '$ARGUMENTS' else 'AAPL'
-graph = TradingAgentsGraph(config=DEFAULT_CONFIG, debug=False)
+graph = TradingMindGraph(config=DEFAULT_CONFIG, debug=False)
 final_state, signal = graph.propagate(ticker, str(date.today()))
 print('\\n=== ANALYSIS RESULT ===')
 print(f'Ticker: {ticker}')

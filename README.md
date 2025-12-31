@@ -1,7 +1,7 @@
-# TradingAgents: Multi-Agent LLM Financial Trading Framework
+# TradingMind: Multi-Agent LLM Financial Trading Framework
 
 <p align="center">
-  <img src="docs/images/homepage.jpg" alt="TradingAgents Web UI" width="800">
+  <img src="docs/images/homepage.jpg" alt="TradingMind Web UI" width="800">
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 ---
 
-TradingAgents is a multi-agent framework that mirrors real-world trading firms. Specialized LLM-powered agents—analysts, researchers, traders, and risk managers—collaborate through debate to evaluate market conditions and inform trading decisions.
+TradingMind is a multi-agent framework that mirrors real-world trading firms. Specialized LLM-powered agents—analysts, researchers, traders, and risk managers—collaborate through debate to evaluate market conditions and inform trading decisions.
 
 > **Disclaimer:** For research purposes only. Not financial advice.
 
@@ -40,8 +40,8 @@ TradingAgents is a multi-agent framework that mirrors real-world trading firms. 
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Clone and install
-git clone https://github.com/your-repo/tradingagents.git
-cd tradingagents
+git clone https://github.com/your-repo/tradingmind.git
+cd tradingmind
 uv sync
 
 # 3. Configure API keys
@@ -149,9 +149,9 @@ The CLI prompts for ticker, date, and LLM provider.
 ### Python API
 
 ```python
-from backend.graph.trading_graph import TradingAgentsGraph
+from backend.graph.trading_graph import TradingMindGraph
 
-graph = TradingAgentsGraph()
+graph = TradingMindGraph()
 final_state, decision = graph.propagate("NVDA", "2024-12-01")
 print(f"Decision: {decision}")
 ```
@@ -189,7 +189,7 @@ cp .env.example .env
 ## Project Structure
 
 ```
-tradingagents/
+tradingmind/
 ├── api/                  # FastAPI backend
 ├── backend/
 │   ├── agents/           # All agent implementations

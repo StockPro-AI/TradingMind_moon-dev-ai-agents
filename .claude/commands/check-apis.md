@@ -2,7 +2,7 @@ Verify all API keys and data sources are properly configured.
 
 ## Instructions
 
-Check the TradingAgents API configuration:
+Check the TradingMind API configuration:
 
 1. Check environment variables:
 ```bash

@@ -24,7 +24,7 @@ from rich import box
 from rich.align import Align
 from rich.rule import Rule
 
-from backend.graph.trading_graph import TradingAgentsGraph
+from backend.graph.trading_graph import TradingMindGraph
 from backend.default_config import DEFAULT_CONFIG
 from cli.models import AnalystType
 from cli.utils import *
@@ -32,8 +32,8 @@ from cli.utils import *
 console = Console()
 
 app = typer.Typer(
-    name="TradingAgents",
-    help="TradingAgents CLI: Multi-Agents LLM Financial Trading Framework",
+    name="TradingMind",
+    help="TradingMind CLI: Multi-Agent LLM Financial Trading Framework",
     add_completion=True,  # Enable shell completion
 )
 
@@ -749,7 +749,7 @@ def run_analysis():
     config["llm_provider"] = selections["llm_provider"].lower()
 
     # Initialize the graph
-    graph = TradingAgentsGraph(
+    graph = TradingMindGraph(
         [analyst.value for analyst in selections["analysts"]], config=config, debug=True
     )
 

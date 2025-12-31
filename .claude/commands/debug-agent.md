@@ -2,7 +2,7 @@ Debug agent state and memory for troubleshooting.
 
 ## Instructions
 
-Debug the TradingAgents system:
+Debug the TradingMind system:
 
 1. Check ChromaDB memory status:
 ```bash
@@ -51,8 +51,8 @@ except ImportError as e:
 
 print('\\n=== Graph Import Check ===')
 try:
-    from backend.graph.trading_graph import TradingAgentsGraph
-    print('TradingAgentsGraph import: OK')
+    from backend.graph.trading_graph import TradingMindGraph
+    print('TradingMindGraph import: OK')
 except ImportError as e:
     print(f'Import Error: {e}')
 "

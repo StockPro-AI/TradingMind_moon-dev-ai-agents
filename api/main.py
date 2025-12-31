@@ -1,5 +1,5 @@
 """
-FastAPI backend for TradingAgents
+FastAPI backend for TradingMind
 Provides REST API and WebSocket endpoints for real-time trading analysis
 """
 
@@ -39,7 +39,7 @@ if not os.getenv('ANTHROPIC_API_KEY') and not os.getenv('OPENAI_API_KEY'):
 # Add parent directory to path to import backend
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from backend.graph.trading_graph import TradingAgentsGraph
+from backend.graph.trading_graph import TradingMindGraph
 from backend.default_config import DEFAULT_CONFIG
 from api.utils import (
     extract_text,
@@ -50,7 +50,7 @@ from api.utils import (
 )
 
 app = FastAPI(
-    title="TradingAgents API",
+    title="TradingMind API",
     description="Multi-Agent LLM Financial Trading Framework API",
     version="1.0.0"
 )
@@ -66,7 +66,7 @@ app.add_middleware(
 
 # Store active trading graphs and WebSocket connections
 active_connections: List[WebSocket] = []
-trading_graphs: Dict[str, TradingAgentsGraph] = {}
+trading_graphs: Dict[str, TradingMindGraph] = {}
 
 # Initialize Redis client
 try:
@@ -302,7 +302,7 @@ async def analyze_stock(request: AnalysisRequest):
         selected_analysts = get_selected_analysts(provider)
         debug_log(f"Using analysts: {selected_analysts}")
 
-        ta = TradingAgentsGraph(debug=False, config=config, selected_analysts=selected_analysts)
+        ta = TradingMindGraph(debug=False, config=config, selected_analysts=selected_analysts)
 
         # Run analysis - handle partial failures gracefully
         try:
@@ -472,7 +472,7 @@ async def compare_analysis(request: AnalysisRequest):
             debug_log(f"Using analysts for {provider_name}: {selected_analysts}")
 
             # Run analysis - handle partial failures gracefully
-            ta = TradingAgentsGraph(debug=False, config=config, selected_analysts=selected_analysts)
+            ta = TradingMindGraph(debug=False, config=config, selected_analysts=selected_analysts)
             try:
                 final_state, decision = ta.propagate(ticker, date)
             except Exception as e:
@@ -824,7 +824,7 @@ async def websocket_analyze(websocket: WebSocket):
                                 "timestamp": datetime.now().isoformat()
                             })
 
-                ta = TradingAgentsGraph(debug=True, config=config, message_callback=message_callback)
+                ta = TradingMindGraph(debug=True, config=config, message_callback=message_callback)
 
                 # Send progress update
                 await manager.send_message({

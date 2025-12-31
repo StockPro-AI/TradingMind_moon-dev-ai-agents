@@ -1,8 +1,8 @@
-# TradingAgents - Claude Code Project Guide
+# TradingMind - Claude Code Project Guide
 
 ## Project Overview
 
-TradingAgents is a multi-agent LLM financial trading framework that simulates real-world trading firm dynamics. It deploys specialized LLM-powered agents that collaborate through debates to evaluate market conditions and inform trading decisions.
+TradingMind is a multi-agent LLM financial trading framework that simulates real-world trading firm dynamics. It deploys specialized LLM-powered agents that collaborate through debates to evaluate market conditions and inform trading decisions.
 
 ## Architecture
 
@@ -43,7 +43,7 @@ backend/
 │   ├── risk_debate/  # Aggressive, Conservative, Neutral debaters
 │   └── utils/        # Agent utilities, tools, memory, states
 ├── graph/            # LangGraph workflow orchestration
-│   ├── trading_graph.py  # Main TradingAgentsGraph class
+│   ├── trading_graph.py  # Main TradingMindGraph class
 │   ├── setup.py          # Graph node/edge configuration
 │   └── conditional_logic.py  # Routing logic
 ├── dataflows/        # Data vendor integrations
@@ -163,4 +163,4 @@ uv run python -c "from backend.analysis import RiskCalculator; print(RiskCalcula
 1. Enable debug logging: Set `DEBUG_LOGGING=true` in `.env`
 2. Check API rate limits: Alpha Vantage has 5 calls/min on free tier
 3. Memory issues: Set `USE_MEMORY=false` to disable ChromaDB
-4. View graph execution: Use `debug=True` in `TradingAgentsGraph()`
+4. View graph execution: Use `debug=True` in `TradingMindGraph()`
