@@ -47,7 +47,7 @@ TradingMind is a multi-agent framework that mirrors real-world trading firms. Sp
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Clone and install
-git clone <your-repo-url>
+git clone https://github.com/StockPro-AI/TradingMind_moon-dev-ai-agents.git
 cd TradingMind_moon-dev-ai-agents
 uv sync
 
