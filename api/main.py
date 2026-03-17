@@ -18,6 +18,8 @@ import re
 from dotenv import load_dotenv
 import redis
 import hashlib
+from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent / '.env'
@@ -1054,8 +1056,57 @@ async def get_history(ticker: str):
 @app.get("/api/models")
 async def get_available_models():
     """Get list of available LLM models"""
+    def fetch_ollama_models() -> List[str]:
+        """Try to fetch local Ollama models, fallback to pragmatic defaults."""
+        fallback_models = ["llama3.1", "llama3.2", "mistral", "phi3", "qwen2.5"]
+        try:
+            req = Request("http://localhost:11434/api/tags", method="GET")
+            with urlopen(req, timeout=2) as response:
+                data = json.loads(response.read().decode("utf-8"))
+
+            models = []
+            for item in data.get("models", []):
+                model_name = item.get("model")
+                if model_name:
+                    models.append(model_name)
+
+            return models or fallback_models
+        except (URLError, HTTPError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            debug_log(f"Ollama model discovery failed, using fallback: {e}")
+            return fallback_models
+
+    def fetch_lmstudio_models() -> List[str]:
+        """Try to fetch local LM Studio models (OpenAI compatible), fallback to defaults."""
+        fallback_models = [
+            "local-model",
+            "qwen2.5-7b-instruct",
+            "llama-3.1-8b-instruct",
+            "mistral-7b-instruct-v0.3"
+        ]
+        try:
+            req = Request("http://localhost:1234/v1/models", method="GET")
+            with urlopen(req, timeout=2) as response:
+                data = json.loads(response.read().decode("utf-8"))
+
+            models = []
+            for item in data.get("data", []):
+                model_id = item.get("id")
+                if model_id:
+                    models.append(model_id)
+
+            return models or fallback_models
+        except (URLError, HTTPError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            debug_log(f"LM Studio model discovery failed, using fallback: {e}")
+            return fallback_models
+
     return {
         "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-preview", "o1-mini", "o4-mini"],
+        "openrouter": [
+            "openai/gpt-4o-mini",
+            "anthropic/claude-3.5-sonnet",
+            "google/gemini-2.0-flash-001",
+            "meta-llama/llama-3.1-70b-instruct"
+        ],
         "anthropic": [
             "claude-3-5-sonnet-20241022",
             "claude-3-5-haiku-20241022",
@@ -1063,7 +1114,10 @@ async def get_available_models():
             "claude-3-sonnet-20240229",
             "claude-3-haiku-20240307"
         ],
-        "google": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]
+        "google": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"],
+        "mistral": ["mistral-large-latest", "mistral-small-latest", "codestral-latest"],
+        "ollama": fetch_ollama_models(),
+        "lmstudio": fetch_lmstudio_models()
     }
 
 
