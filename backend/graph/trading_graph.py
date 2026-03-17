@@ -44,6 +44,11 @@ def _get_deepseek_llm(**kwargs):
     from langchain_deepseek import ChatDeepSeek
     return ChatDeepSeek(**kwargs)
 
+
+def is_openai_compatible_provider(provider: str) -> bool:
+    """Return whether the provider should be initialized via ChatOpenAI."""
+    return provider in ("openai", "ollama", "openrouter", "lmstudio", "mistral")
+
 from backend.agents import *
 from backend.default_config import DEFAULT_CONFIG
 from backend.agents.utils.memory import FinancialSituationMemory
@@ -129,11 +134,11 @@ class TradingMindGraph:
             logger.debug(f"Quick think model: {llm_kwargs['model']}")
             self.quick_thinking_llm = _get_deepseek_llm(**llm_kwargs)
 
-        elif provider in ("openai", "ollama", "openrouter"):
+        elif is_openai_compatible_provider(provider):
             # Use api_key from config if provided, otherwise LangChain will use environment variable
             llm_kwargs = {
                 "model": self.config["deep_think_llm"],
-                "base_url": self.config["backend_url"]
+                "base_url": self.config.get("base_url", self.config.get("backend_url")),
             }
             if "api_key" in self.config and self.config["api_key"]:
                 llm_kwargs["api_key"] = self.config["api_key"]
