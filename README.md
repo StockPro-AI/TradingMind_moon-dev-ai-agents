@@ -171,6 +171,11 @@ cp .env.example .env
 | `OPENAI_API_KEY` | Yes* | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Yes* | Anthropic API key |
 | `DEEPSEEK_API_KEY` | Yes* | DeepSeek API key (budget option) |
+| `OPENROUTER_API_KEY` | Yes* | OpenRouter API key |
+| `MISTRAL_API_KEY` | Yes* | Mistral API key |
+| `LMSTUDIO_BASE_URL` | No | Local LM Studio OpenAI-compatible endpoint (default: `http://localhost:1234/v1`) |
+| `OLLAMA_BASE_URL` | No | Local Ollama OpenAI-compatible endpoint (default: `http://localhost:11434/v1`) |
+| `OLLAMA_API_KEY` | No | Optional token when Ollama runs behind remote/proxy auth |
 | `ALPHA_VANTAGE_API_KEY` | Yes | Market data ([free key](https://www.alphavantage.co/support/#api-key)) |
 | `USE_MEMORY` | No | Enable learning system (default: true) |
 | `REDIS_HOST` | No | Redis host for caching |
@@ -180,11 +185,66 @@ cp .env.example .env
 
 ### LLM Provider Setup
 
-| Provider | Get API Key | Notes |
-|----------|------------|-------|
-| OpenAI | [platform.openai.com](https://platform.openai.com/api-keys) | GPT-4o recommended |
-| Anthropic | [console.anthropic.com](https://console.anthropic.com/) | Claude 3.5 Sonnet |
-| DeepSeek | [platform.deepseek.com](https://platform.deepseek.com/) | Budget-friendly |
+#### Cloud Providers
+
+| Provider | Get API Key | `llm_provider` | `backend_url` | Example Models |
+|----------|-------------|----------------|---------------|----------------|
+| OpenAI | [platform.openai.com](https://platform.openai.com/api-keys) | `openai` | `https://api.openai.com/v1` | `gpt-4o`, `gpt-4o-mini` |
+| Anthropic | [console.anthropic.com](https://console.anthropic.com/) | `anthropic` | `https://api.anthropic.com/` | `claude-3-5-sonnet` |
+| DeepSeek | [platform.deepseek.com](https://platform.deepseek.com/) | `deepseek` | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| OpenRouter | [openrouter.ai](https://openrouter.ai/keys) | `openrouter` | `https://openrouter.ai/api/v1` | `deepseek/deepseek-chat-v3-0324:free`, `meta-llama/llama-3.3-8b-instruct:free` |
+| Mistral | [console.mistral.ai](https://console.mistral.ai/) | `mistral` | `https://api.mistral.ai/v1` | `mistral-large-latest`, `mistral-small-latest` |
+
+#### Local Providers
+
+| Provider | `llm_provider` | `backend_url` | Example Models |
+|----------|----------------|---------------|----------------|
+| LM Studio (local) | `lmstudio` | `http://localhost:1234/v1` | `local-model` |
+| Ollama (local or remote proxy) | `ollama` | `http://localhost:11434/v1` | `qwen3`, `llama3.1` |
+
+#### Provider Configuration Examples
+
+```yaml
+# OpenAI
+llm_provider: openai
+backend_url: https://api.openai.com/v1
+deep_think_llm: gpt-4o
+quick_think_llm: gpt-4o-mini
+```
+
+```yaml
+# OpenRouter
+llm_provider: openrouter
+backend_url: https://openrouter.ai/api/v1
+deep_think_llm: deepseek/deepseek-chat-v3-0324:free
+quick_think_llm: meta-llama/llama-3.3-8b-instruct:free
+```
+
+```yaml
+# Mistral
+llm_provider: mistral
+backend_url: https://api.mistral.ai/v1
+deep_think_llm: mistral-large-latest
+quick_think_llm: mistral-small-latest
+```
+
+```yaml
+# LM Studio (local)
+llm_provider: lmstudio
+backend_url: http://localhost:1234/v1
+deep_think_llm: local-model
+quick_think_llm: local-model
+```
+
+```yaml
+# Ollama
+llm_provider: ollama
+backend_url: http://localhost:11434/v1
+deep_think_llm: qwen3
+quick_think_llm: llama3.1
+```
+
+> Note: LM Studio, Ollama, OpenRouter, and Mistral can be used through OpenAI-compatible endpoints. This lets TradingMind route requests through a consistent API shape (`base_url` + API key + model name).
 
 ## Project Structure
 
@@ -208,7 +268,7 @@ tradingmind/
 ## Tech Stack
 
 - **Agent Framework**: LangChain + LangGraph
-- **LLM Providers**: OpenAI, Anthropic, DeepSeek, Google
+- **LLM Providers**: OpenAI, Anthropic, DeepSeek, OpenRouter, Mistral, LM Studio, Ollama, Google
 - **Data Sources**: yfinance, Alpha Vantage, Finnhub, SEC EDGAR
 - **Memory**: ChromaDB (vector storage)
 - **Backend**: FastAPI + Redis
