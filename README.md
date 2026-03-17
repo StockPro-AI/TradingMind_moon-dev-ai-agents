@@ -64,6 +64,41 @@ cd frontend && npm i && npm run dev # Terminal 2: Frontend
 # Open http://localhost:3000
 ```
 
+
+## Windows One-Click Setup
+
+### Prerequisites
+
+- Docker Desktop
+- WSL2 backend enabled in Docker Desktop settings
+
+### Start
+
+1. Double-click `setup.bat` in the repository root.
+2. Wait for the script to finish and verify service state.
+
+### Stop
+
+```bash
+docker compose down
+```
+
+### Logs
+
+```bash
+docker compose logs -f
+```
+
+### Local Validation Checklist
+
+1. Run `setup.bat` by double-clicking it.
+2. Verify containers are running:
+   ```bash
+   docker compose ps
+   ```
+3. Open the app in your browser:
+   - http://localhost:8001
+
 ## Architecture
 
 ```
