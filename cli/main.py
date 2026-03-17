@@ -194,9 +194,9 @@ def update_display(layout, spinner_text=None):
     # Header with welcome message
     layout["header"].update(
         Panel(
-            "[bold green]Welcome to TradingAgents CLI[/bold green]\n"
+            "[bold green]Welcome to TradingMind CLI[/bold green]\n"
             "[dim]© [Tauric Research](https://github.com/TauricResearch)[/dim]",
-            title="Welcome to TradingAgents",
+            title="Welcome to TradingMind",
             border_style="green",
             padding=(1, 2),
             expand=True,
@@ -403,11 +403,11 @@ def get_user_selections():
 
     # Create welcome box content
     welcome_content = f"{welcome_ascii}\n"
-    welcome_content += "[bold green]TradingAgents: Multi-Agents LLM Financial Trading Framework - CLI[/bold green]\n\n"
+    welcome_content += "[bold green]TradingMind: Multi-Agent AI Financial Trading Framework - CLI[/bold green]\n\n"
     welcome_content += "[bold]Workflow Steps:[/bold]\n"
     welcome_content += "I. Analyst Team → II. Research Team → III. Trader → IV. Risk Management → V. Portfolio Management\n\n"
     welcome_content += (
-        "[dim]Built by [Tauric Research](https://github.com/TauricResearch)[/dim]"
+        "[dim]Original concept by [Tauric Research](https://github.com/TauricResearch) • Modified by StockPro-AI (stockpro-ai.de) and Codex, 03/2026[/dim]"
     )
 
     # Create and center the welcome box
@@ -415,8 +415,8 @@ def get_user_selections():
         welcome_content,
         border_style="green",
         padding=(1, 2),
-        title="Welcome to TradingAgents",
-        subtitle="Multi-Agents LLM Financial Trading Framework",
+        title="Welcome to TradingMind",
+        subtitle="Multi-Agent AI Financial Trading Framework",
     )
     console.print(Align.center(welcome_box))
     console.print()  # Add a blank line after the welcome box
