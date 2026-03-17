@@ -1,4 +1,4 @@
-# TradingMind: Multi-Agent LLM Financial Trading Framework
+# TradingMind: Multi-Agent AI Financial Trading Framework
 
 <p align="center">
   <img src="docs/images/homepage.jpg" alt="TradingMind Web UI" width="800">
@@ -20,6 +20,8 @@
 
 TradingMind is a multi-agent framework that mirrors real-world trading firms. Specialized LLM-powered agents—analysts, researchers, traders, and risk managers—collaborate through debate to evaluate market conditions and inform trading decisions.
 
+> **Brand note:** Modified by **StockPro-AI** ([stockpro-ai.de](https://stockpro-ai.de)) and **Codex**, 03/2026.
+
 > **Disclaimer:** For research purposes only. Not financial advice.
 
 ## Features
@@ -30,6 +32,11 @@ TradingMind is a multi-agent framework that mirrors real-world trading firms. Sp
 | **Bull vs Bear Debate** | Researchers argue opposing viewpoints for balanced insights |
 | **Risk Management** | 3-way risk debate (Aggressive, Conservative, Neutral) |
 | **Memory & Learning** | ChromaDB-powered system learns from past decisions |
+| **Provider Comparison** | Compare OpenAI vs DeepSeek side-by-side via `/api/compare` |
+| **Real-time Delivery** | REST + WebSocket streaming for progressive analysis updates |
+| **Smart Caching** | Redis cache for repeated ticker/date requests (24h TTL) |
+| **Model Discovery** | Dynamic local model lookup for Ollama and LM Studio |
+| **Backtesting Toolkit** | Built-in backtesting engine and strategy metrics |
 | **Multiple LLMs** | OpenAI, Anthropic Claude, DeepSeek, Google |
 | **Web UI + CLI** | Modern React frontend & rich terminal interface |
 
@@ -40,8 +47,8 @@ TradingMind is a multi-agent framework that mirrors real-world trading firms. Sp
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Clone and install
-git clone https://github.com/your-repo/tradingmind.git
-cd tradingmind
+git clone <your-repo-url>
+cd TradingMind_moon-dev-ai-agents
 uv sync
 
 # 3. Configure API keys
@@ -138,13 +145,23 @@ cd frontend && npm run dev
 | http://localhost:8001 | API |
 | http://localhost:8001/docs | Swagger Docs |
 
+### REST & WebSocket Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/analyze` | POST | Runs full analysis with categorized results |
+| `/api/compare` | POST | Runs side-by-side provider comparison (OpenAI vs DeepSeek) |
+| `/api/history/{ticker}` | GET | Returns stored analysis history logs |
+| `/api/models` | GET | Returns cloud + local model options |
+| `/ws/analyze` | WS | Streams progress events during analysis |
+
 ### CLI
 
 ```bash
 uv run python -m cli.main
 ```
 
-The CLI prompts for ticker, date, and LLM provider.
+The CLI prompts for ticker, date, analyst selection, and LLM provider.
 
 ### Python API
 
@@ -273,6 +290,12 @@ tradingmind/
 - **Memory**: ChromaDB (vector storage)
 - **Backend**: FastAPI + Redis
 - **Frontend**: React + Vite + Tailwind CSS
+
+## Roadmap-Oriented Notes
+
+- Use `/api/compare` to benchmark provider reliability and response quality for your preferred market setup.
+- Enable Redis to improve latency for repeated symbol/date analyses.
+- Combine WebSocket streaming + API caching for a responsive UI under heavier usage.
 
 ## License
 
