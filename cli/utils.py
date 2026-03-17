@@ -149,10 +149,17 @@ def select_shallow_thinking_agent(provider) -> str:
             ("Meta: Llama 3.3 8B Instruct - A lightweight and ultra-fast variant of Llama 3.3 70B", "meta-llama/llama-3.3-8b-instruct:free"),
             ("google/gemini-2.0-flash-exp:free - Gemini Flash 2.0 offers a significantly faster time to first token", "google/gemini-2.0-flash-exp:free"),
         ],
+        "mistral": [
+            ("Mistral Small Latest - Lightweight model for quick tasks", "mistral-small-latest"),
+            ("Mistral Medium Latest - Balanced speed and quality", "mistral-medium-latest"),
+        ],
         "ollama": [
             ("llama3.1 local", "llama3.1"),
             ("llama3.2 local", "llama3.2"),
-        ]
+        ],
+        "lmstudio": [
+            ("LMStudio local model (configurable)", "local-model"),
+        ],
     }
 
     choice = questionary.select(
@@ -211,10 +218,18 @@ def select_deep_thinking_agent(provider) -> str:
             ("DeepSeek V3 - a 685B-parameter, mixture-of-experts model", "deepseek/deepseek-chat-v3-0324:free"),
             ("Deepseek - latest iteration of the flagship chat model family from the DeepSeek team.", "deepseek/deepseek-chat-v3-0324:free"),
         ],
+        "mistral": [
+            ("Mistral Small Latest - Lightweight reasoning model", "mistral-small-latest"),
+            ("Mistral Medium Latest - Balanced reasoning and speed", "mistral-medium-latest"),
+            ("Mistral Large Latest - Strongest reasoning model", "mistral-large-latest"),
+        ],
         "ollama": [
             ("llama3.1 local", "llama3.1"),
             ("qwen3", "qwen3"),
-        ]
+        ],
+        "lmstudio": [
+            ("LMStudio local model (configurable)", "local-model"),
+        ],
     }
     
     choice = questionary.select(
@@ -247,7 +262,9 @@ def select_llm_provider() -> tuple[str, str]:
         ("Anthropic", "https://api.anthropic.com/"),
         ("Google", "https://generativelanguage.googleapis.com/v1"),
         ("Openrouter", "https://openrouter.ai/api/v1"),
-        ("Ollama", "http://localhost:11434/v1"),        
+        ("Ollama", "http://localhost:11434/v1"),
+        ("LMStudio", "http://localhost:1234/v1"),
+        ("Mistral", "https://api.mistral.ai/v1"),
     ]
     
     choice = questionary.select(
