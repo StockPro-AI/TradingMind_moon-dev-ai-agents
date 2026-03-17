@@ -22,6 +22,19 @@ def configure_provider(config: Dict[str, Any], provider: str) -> Dict[str, Any]:
     Returns:
         Modified config dict with provider-specific settings
     """
+    provider = (provider or "").strip().lower()
+
+    def _env_or_config(env_vars: List[str], config_key: str, default: Optional[str] = None) -> Optional[str]:
+        """Get value from env vars first, then config, then default."""
+        for env_var in env_vars:
+            env_value = os.getenv(env_var)
+            if env_value:
+                return env_value
+        config_value = config.get(config_key)
+        if config_value not in (None, ""):
+            return config_value
+        return default
+
     if provider == "deepseek":
         config["backend_url"] = "https://api.deepseek.com/v1"
         config["deep_think_llm"] = "deepseek-chat"
@@ -40,6 +53,51 @@ def configure_provider(config: Dict[str, Any], provider: str) -> Dict[str, Any]:
         config["quick_think_llm"] = "gpt-4o-mini"
         config["api_key"] = os.getenv("OPENAI_API_KEY")
         config["llm_provider"] = "openai"
+    elif provider == "ollama":
+        config["llm_provider"] = "ollama"
+        config["backend_url"] = _env_or_config(
+            ["OLLAMA_BASE_URL", "OLLAMA_BACKEND_URL"],
+            "backend_url",
+            "http://localhost:11434/v1",
+        )
+        config["api_key"] = _env_or_config(["OLLAMA_API_KEY"], "api_key", "")
+        config["deep_think_llm"] = config.get("deep_think_llm") or os.getenv("OLLAMA_DEEP_MODEL") or "qwen3"
+        config["quick_think_llm"] = config.get("quick_think_llm") or os.getenv("OLLAMA_QUICK_MODEL") or "llama3.1"
+    elif provider == "lmstudio":
+        config["llm_provider"] = "lmstudio"
+        config["backend_url"] = _env_or_config(
+            ["LMSTUDIO_BASE_URL", "LM_STUDIO_BASE_URL", "LMSTUDIO_BACKEND_URL"],
+            "backend_url",
+            "http://localhost:1234/v1",
+        )
+        config["api_key"] = _env_or_config(["LMSTUDIO_API_KEY", "LM_STUDIO_API_KEY"], "api_key", "")
+        config["deep_think_llm"] = config.get("deep_think_llm") or os.getenv("LMSTUDIO_DEEP_MODEL") or "local-model"
+        config["quick_think_llm"] = config.get("quick_think_llm") or os.getenv("LMSTUDIO_QUICK_MODEL") or "local-model"
+    elif provider == "openrouter":
+        config["llm_provider"] = "openrouter"
+        config["backend_url"] = _env_or_config(
+            ["OPENROUTER_BASE_URL", "OPENROUTER_BACKEND_URL"],
+            "backend_url",
+            "https://openrouter.ai/api/v1",
+        )
+        config["api_key"] = _env_or_config(["OPENROUTER_API_KEY"], "api_key")
+        config["deep_think_llm"] = config.get("deep_think_llm") or os.getenv("OPENROUTER_DEEP_MODEL") or "deepseek/deepseek-chat-v3-0324:free"
+        config["quick_think_llm"] = config.get("quick_think_llm") or os.getenv("OPENROUTER_QUICK_MODEL") or "meta-llama/llama-3.3-8b-instruct:free"
+    elif provider == "mistral":
+        config["llm_provider"] = "mistral"
+        config["backend_url"] = _env_or_config(
+            ["MISTRAL_BASE_URL", "MISTRAL_BACKEND_URL"],
+            "backend_url",
+            "https://api.mistral.ai/v1",
+        )
+        config["api_key"] = _env_or_config(["MISTRAL_API_KEY"], "api_key")
+        config["deep_think_llm"] = config.get("deep_think_llm") or os.getenv("MISTRAL_DEEP_MODEL") or "mistral-large-latest"
+        config["quick_think_llm"] = config.get("quick_think_llm") or os.getenv("MISTRAL_QUICK_MODEL") or "mistral-small-latest"
+    else:
+        allowed_providers = ["deepseek", "openai", "ollama", "lmstudio", "openrouter", "mistral"]
+        raise ValueError(
+            f"Unknown LLM provider '{provider}'. Allowed providers: {', '.join(allowed_providers)}"
+        )
 
     return config
 
