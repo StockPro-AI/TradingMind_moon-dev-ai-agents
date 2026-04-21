@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     # LLM providers
     "langchain-anthropic>=0.3.15",
-    "langchain-openai>=0.3.23",
+    "langchain-openai>=1.1.16",
     "langchain-google-genai>=2.1.5",
     "langchain-deepseek>=0.1.0",
     "langchain-experimental>=0.3.4",
@@ -30,12 +30,12 @@ dependencies = [
     "feedparser>=6.0.11",
     "praw>=7.8.1",
     "parsel>=1.10.0",
-    "requests>=2.32.4",
+    "requests>=2.33.1",
 
     # API server
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",
     "websockets>=14.0",
 
     # CLI
@@ -50,7 +50,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "ruff>=0.8.0",
 ]
 
